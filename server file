@@ -1,0 +1,177 @@
+from flask import Flask, jsonify
+import requests
+
+app = Flask(__name__)
+app.json.sort_keys = False
+
+# 외부 센서 API 서버 URL
+EXTERNAL_SENSOR_API_URL = "http://203.255.81.72:10021/sensor/api/map"
+
+
+# =========================
+# 서버 상태 확인
+# =========================
+@app.route("/")
+def home():
+    return "Walking Ritual Flask Server is running!"
+
+
+# =========================
+# 외부 API 서버에서 센서 데이터 조회
+# =========================
+@app.route("/api/sensors")
+def get_external_sensor_data():
+    response = requests.get(EXTERNAL_SENSOR_API_URL)
+    sensor_list = response.json()
+
+    result = []
+
+    for sensor in sensor_list:
+        result.append({
+            "sensor": sensor.get("sensor"),
+            "latitude": sensor.get("latitude"),
+            "longitude": sensor.get("longitude"),
+            "temperature": sensor.get("temperature"),
+            "co2": sensor.get("co2"),
+            "time": sensor.get("time"),
+            "fresh": sensor.get("fresh")
+        })
+
+    return jsonify(result)
+
+
+# =========================
+# 사용 가능한 센서만 조회
+# pws01, vs01, vs02 제외
+# =========================
+@app.route("/api/sensors/active")
+def get_active_sensor_data():
+    response = requests.get(EXTERNAL_SENSOR_API_URL)
+    sensor_list = response.json()
+
+    unused_sensors = ["pws01", "vs01", "vs02"]
+
+    result = []
+
+    for sensor in sensor_list:
+        sensor_name = sensor.get("sensor")
+
+        if sensor_name in unused_sensors:
+            continue
+
+        result.append({
+            "sensor": sensor_name,
+            "latitude": sensor.get("latitude"),
+            "longitude": sensor.get("longitude"),
+            "temperature": sensor.get("temperature"),
+            "co2": sensor.get("co2"),
+            "time": sensor.get("time"),
+            "fresh": sensor.get("fresh")
+        })
+
+    return jsonify(result)
+
+
+# =========================
+# 갱신 중인 센서만 조회
+# fresh == True
+# =========================
+@app.route("/api/sensors/fresh")
+def get_fresh_sensor_data():
+    response = requests.get(EXTERNAL_SENSOR_API_URL)
+    sensor_list = response.json()
+
+    result = []
+
+    for sensor in sensor_list:
+        if sensor.get("fresh") == True:
+            result.append({
+                "sensor": sensor.get("sensor"),
+                "latitude": sensor.get("latitude"),
+                "longitude": sensor.get("longitude"),
+                "temperature": sensor.get("temperature"),
+                "co2": sensor.get("co2"),
+                "time": sensor.get("time"),
+                "fresh": sensor.get("fresh")
+            })
+
+    return jsonify(result)
+
+
+# =========================
+# 특정 센서 조회
+# 예: /api/sensors/sensor%2001
+# sensor 01처럼 공백이 있으면 브라우저에서는 %20 사용
+# =========================
+@app.route("/api/sensors/<sensor_name>")
+def get_sensor_by_name(sensor_name):
+    response = requests.get(EXTERNAL_SENSOR_API_URL)
+    sensor_list = response.json()
+
+    for sensor in sensor_list:
+        if sensor.get("sensor") == sensor_name:
+            return jsonify({
+                "sensor": sensor.get("sensor"),
+                "latitude": sensor.get("latitude"),
+                "longitude": sensor.get("longitude"),
+                "temperature": sensor.get("temperature"),
+                "co2": sensor.get("co2"),
+                "time": sensor.get("time"),
+                "fresh": sensor.get("fresh")
+            })
+
+    return jsonify({
+        "error": "해당 센서를 찾을 수 없습니다."
+    }), 404
+
+
+# =========================
+# 추후 구현 예정: DB 저장
+# =========================
+@app.route("/db/save", methods=["POST"])
+def save_to_database_later():
+
+    return "DB 저장 기능은 아직 구현되지 않았습니다."
+
+
+# =========================
+# 추후 구현 예정: 전체/경로 날씨 평균 계산
+# =========================
+@app.route("/weather/average")
+def calculate_weather_average_later():
+
+    return "전체/경로 날씨 평균 계산 기준이 아직 정해지지 않았습니다."
+
+
+# =========================
+# 추후 구현 예정: 산책 경로 추천
+# =========================
+@app.route("/route/recommend")
+def recommend_route_later():
+
+    return "산책 경로 추천 알고리즘 기준이 아직 정해지지 않았습니다."
+
+
+# =========================
+# 추후 구현 예정: 미션 결과 저장
+# =========================
+@app.route("/mission/result", methods=["POST"])
+def save_mission_result_later():
+
+    return "미션 결과 저장 기능은 아직 구현되지 않았습니다."
+
+
+# =========================
+# 추후 구현 예정: 포인트 / 랭킹 관리
+# =========================
+@app.route("/ranking")
+def ranking_later():
+
+    return "포인트 및 랭킹 관리 기준이 아직 정해지지 않았습니다."
+
+
+# =========================
+# 서버 실행
+# =========================
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
