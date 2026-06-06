@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F3F0DF"
+    tools:context=".MainActivity">
+
+    <!-- 1. 산책 추천 + 포인트 카드 (최상단) -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/recommendationCard"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="12dp"
+    android:layout_marginTop="12dp"
+    app:cardBackgroundColor="#005088"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
+    app:layout_constraintTop_toTopOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintEnd_toEndOf="parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="14dp">
+
+        <TextView
+            android:id="@+id/tvWalkRecommendation"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="오늘의 산책 추천도: 계산 중..."
+            android:textColor="#F3F0DF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvUserPoints"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="0 P"
+            android:textColor="#11CAA0"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</androidx.cardview.widget.CardView>
+
+    <!-- 2. 다음 센서 정보 + 걸음 수 카드 -->
+<androidx.cardview.widget.CardView
+android:id="@+id/nextSensorCard"
+android:layout_width="0dp"
+android:layout_height="wrap_content"
+android:layout_marginHorizontal="12dp"
+android:layout_marginTop="8dp"
+app:cardBackgroundColor="#FFFFFF"
+app:cardCornerRadius="12dp"
+app:cardElevation="4dp"
+app:layout_constraintTop_toBottomOf="@id/recommendationCard"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintEnd_toEndOf="parent">
+
+<LinearLayout
+android:layout_width="match_parent"
+android:layout_height="wrap_content"
+android:orientation="vertical"
+android:padding="12dp">
+
+<TextView
+    android:id="@+id/tvNextSensorInfo"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:text="타겟 센서 노드: 대기 중..."
+    android:textColor="#2E4D68"
+    android:textSize="14sp"
+    android:textStyle="bold" />
+
+<TextView
+    android:id="@+id/tvStepCounter"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:text="현재 산책 걸음 수: 0 걸음"
+    android:textColor="#64748B"
+    android:textSize="13sp" />
+</LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- 3. Naver Map (화면 대부분 차지) -->
+<com.naver.maps.map.MapView
+android:id="@+id/mapView"
+android:layout_width="0dp"
+android:layout_height="0dp"
+android:layout_marginHorizontal="8dp"
+android:layout_marginTop="8dp"
+app:layout_constraintTop_toBottomOf="@id/nextSensorCard"
+app:layout_constraintBottom_toTopOf="@id/missionCard"
+app:layout_constraintStart_toStartOf="parent"
+app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 4. 블러 오버레이 -->
+<View
+android:id="@+id/blurOverlay"
+android:layout_width="0dp"
+android:layout_height="0dp"
+android:background="#B3F3F0DF"
+android:visibility="visible"
+app:layout_constraintTop_toTopOf="parent"
+app:layout_constraintBottom_toBottomOf="parent"
+app:layout_constraintStart_toStartOf="parent"
+app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 5. 미션 카드 (하단) -->
+<androidx.cardview.widget.CardView
+android:id="@+id/missionCard"
+android:layout_width="0dp"
+android:layout_height="wrap_content"
+android:layout_marginHorizontal="16dp"
+android:layout_marginBottom="16dp"
+app:cardBackgroundColor="#FFFFFF"
+app:cardCornerRadius="16dp"
+app:cardElevation="12dp"
+app:layout_constraintBottom_toBottomOf="parent"
+app:layout_constraintStart_toStartOf="parent"
+app:layout_constraintEnd_toEndOf="parent">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="26dp"
+    android:gravity="center">
+
+    <ImageView
+        android:id="@+id/ivMissionIcon"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_marginBottom="16dp"
+        android:src="@android:drawable/ic_dialog_map"
+        app:tint="#005088" />
+
+    <TextView
+        android:id="@+id/tvMissionTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="캠퍼스 데이터 가뭄 발생"
+        android:textColor="#005088"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvMissionDesc"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:gravity="center"
+        android:text="일부 구역에 환경 데이터 수집 편중이 심각합니다.\n우회 경로를 산책하며 라디오맵 균형을 맞춰주세요!"
+        android:textColor="#64748B"
+        android:textSize="13sp" />
+
+    <Button
+        android:id="@+id/btnStartWalk"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:backgroundTint="#005088"
+        android:text="데이터 가뭄 해소 산책 시작"
+        android:textColor="#F3F0DF"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+</LinearLayout>
+</androidx.cardview.widget.CardView>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
