@@ -18,6 +18,7 @@ COLLECTION_NAMES = [
     "daily_sensor_stats",
     "mission_results",
     "route_recommendations",
+    "reward_exchanges",
 ]
 
 
@@ -613,6 +614,42 @@ class FirestoreDatabase:
                 "rank": my_rank,
             },
             "rankings": rankings,
+        }
+
+    def exchange_reward(self, user_id: str, point_cost: int, reward_won: int) -> dict[str, Any]:
+        if point_cost <= 0 or reward_won <= 0:
+            raise ValueError("교환 요청 금액이 올바르지 않습니다.")
+
+        user_ref = self.collection("users").document(user_id)
+        user_snapshot = user_ref.get()
+        if not user_snapshot.exists:
+            raise ValueError("사용자 정보를 찾을 수 없습니다.")
+
+        user = user_snapshot.to_dict() or {}
+        total_point = int(user.get("total_point") or 0)
+        if total_point < point_cost:
+            raise ValueError("보유 포인트가 부족합니다.")
+
+        remaining_point = total_point - point_cost
+        now = utc_now_iso()
+        exchange_id = next_id("REWARD_EXCHANGE")
+        user_ref.update({"total_point": remaining_point})
+        self.collection("reward_exchanges").document(exchange_id).set(
+            {
+                "exchange_id": exchange_id,
+                "user_id": user_id,
+                "point_cost": point_cost,
+                "reward_won": reward_won,
+                "exchanged_at": now,
+            }
+        )
+        return {
+            "exchangeId": exchange_id,
+            "userId": user_id,
+            "usedPoint": point_cost,
+            "rewardWon": reward_won,
+            "totalPoint": remaining_point,
+            "exchangedAt": now,
         }
 
     def route_payload_if_missing(

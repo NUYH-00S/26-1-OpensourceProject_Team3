@@ -47,6 +47,7 @@ def list_sensors():
 @app.get("/api/v1/app/bootstrap")
 def app_bootstrap():
     sync = request.args.get("sync", "true").lower() != "false"
+    user_id = request.args.get("userId", "USER_001")
     current_latitude = float(request.args.get("currentLatitude", 36.628123))
     current_longitude = float(request.args.get("currentLongitude", 127.457891))
     max_distance_meter = int(request.args.get("maxDistanceMeter", 2000))
@@ -67,7 +68,7 @@ def app_bootstrap():
             "sync": sync_result,
             "weather": weather_payload("ALL", sensors),
             "routes": routes,
-            "reward": db.reward_summary("USER_001"),
+            "reward": db.reward_summary(user_id),
         },
         "앱 초기 데이터 조회에 성공했습니다.",
     )
@@ -152,6 +153,20 @@ def mission_results():
 def rewards_summary():
     user_id = request.args.get("userId", "USER_001")
     return success(db.reward_summary(user_id), "포인트 및 랭킹 조회에 성공했습니다.")
+
+
+@app.post("/api/v1/rewards/exchange")
+def rewards_exchange():
+    payload = request.get_json(force=True)
+    try:
+        data = db.exchange_reward(
+            user_id=payload.get("userId", "USER_001"),
+            point_cost=int(payload["pointCost"]),
+            reward_won=int(payload["rewardWon"]),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        return failure(str(exc), 400)
+    return success(data, "보상 교환이 완료되었습니다.")
 
 
 @app.post("/api/v1/auth/login")
