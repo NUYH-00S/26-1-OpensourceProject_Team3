@@ -9,6 +9,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -19,10 +20,14 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -59,6 +64,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.concurrent.thread
 import kotlin.concurrent.timer
+import kotlin.random.Random
 
 
 @Suppress("SetTextI18n")
@@ -97,6 +103,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var btnRankingBackHome: Button
     private lateinit var btnRewardBackHome: Button
     private lateinit var routeOptionCard: CardView
+    private lateinit var missionGameCard: CardView
     private lateinit var btnRouteOption1: Button
     private lateinit var btnRouteOption2: Button
     private lateinit var btnRouteOption3: Button
@@ -114,6 +121,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvDestinationDistance: TextView
     private lateinit var tvNextTotemDistance: TextView
     private lateinit var tvUserPoints: TextView
+    private lateinit var tvMissionGameTitle: TextView
+    private lateinit var tvMissionGameTimer: TextView
+    private lateinit var tvMissionGameScore: TextView
+    private lateinit var tvMissionGamePrompt: TextView
+    private lateinit var missionGameBoard: FrameLayout
     private lateinit var etLoginId: EditText
     private lateinit var etLoginPassword: EditText
 
@@ -141,12 +153,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var missionRemainingSeconds = 60
     private var missionInProgress = false
     private var missionCompleted = false
+    private var activeMissionTotem: RouteTotem? = null
+    private var activeMissionGameType: MissionGameType = MissionGameType.TAP_CIRCLE
+    private var missionGameScore = 0
+    private var colorMatchTargetIndex = 0
     private var cachedTotalPoint = 0
 
     private val missionEnterRadiusMeter = 50.0
     private val missionExitRadiusMeter = 60.0
     private val missionDurationSeconds = 60
-    private val missionScore = 15
+    private val missionColors = listOf(
+        MissionColor("초록", "#11CAA0"),
+        MissionColor("파랑", "#005088"),
+        MissionColor("노랑", "#F2C94C"),
+        MissionColor("분홍", "#F28AB2"),
+    )
 
     private lateinit var sensorManager: SensorManager
     private var stepCounterSensor: Sensor? = null
@@ -183,6 +204,20 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val isTarget: Boolean,
     )
 
+    private data class MissionColor(
+        val label: String,
+        val hex: String,
+    )
+
+    private enum class MissionGameType(
+        val title: String,
+        val missionType: String,
+    ) {
+        TAP_CIRCLE("원 터치 미션", "TAP_CIRCLE"),
+        COLOR_MATCH("색 맞추기 미션", "COLOR_MATCH"),
+        AIR_CLEAN("공기 정화 미션", "AIR_CLEAN"),
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -205,6 +240,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnRankingBackHome = findViewById(R.id.btnRankingBackHome)
         btnRewardBackHome = findViewById(R.id.btnRewardBackHome)
         routeOptionCard = findViewById(R.id.routeOptionCard)
+        missionGameCard = findViewById(R.id.missionGameCard)
         btnRouteOption1 = findViewById(R.id.btnRouteOption1)
         btnRouteOption2 = findViewById(R.id.btnRouteOption2)
         btnRouteOption3 = findViewById(R.id.btnRouteOption3)
@@ -222,6 +258,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tvDestinationDistance = findViewById(R.id.tvDestinationDistance)
         tvNextTotemDistance = findViewById(R.id.tvNextTotemDistance)
         tvUserPoints = findViewById(R.id.tvUserPoints)
+        tvMissionGameTitle = findViewById(R.id.tvMissionGameTitle)
+        tvMissionGameTimer = findViewById(R.id.tvMissionGameTimer)
+        tvMissionGameScore = findViewById(R.id.tvMissionGameScore)
+        tvMissionGamePrompt = findViewById(R.id.tvMissionGamePrompt)
+        missionGameBoard = findViewById(R.id.missionGameBoard)
         etLoginId = findViewById(R.id.etLoginId)
         etLoginPassword = findViewById(R.id.etLoginPassword)
 
@@ -645,6 +686,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (::routeOptionCard.isInitialized) {
             routeOptionCard.visibility = View.GONE
         }
+        if (::missionGameCard.isInitialized) {
+            hideMissionGamePanel()
+        }
         updateLocationStatus()
     }
 
@@ -667,6 +711,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (::routeOptionCard.isInitialized) {
             routeOptionCard.visibility = View.GONE
         }
+        if (::missionGameCard.isInitialized) {
+            hideMissionGamePanel()
+        }
         if (etLoginId.text.isBlank() && userNickname.isNotBlank()) {
             etLoginId.setText(userNickname)
         }
@@ -683,6 +730,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         mapContainer.visibility = View.GONE
         rewardContainer.visibility = View.GONE
         rankingContainer.visibility = View.VISIBLE
+        hideMissionGamePanel()
     }
 
     private fun showRewardScreen() {
@@ -691,6 +739,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         mapContainer.visibility = View.GONE
         rankingContainer.visibility = View.GONE
         rewardContainer.visibility = View.VISIBLE
+        hideMissionGamePanel()
     }
 
     private fun startDashboardAutoRefresh() {
@@ -1011,27 +1060,38 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         isAtSensorNode = false
         missionInProgress = false
         missionCompleted = false
+        activeMissionTotem = null
         missionRemainingSeconds = missionDurationSeconds
+        hideMissionGamePanel()
         updateRouteDistanceStatus(currentDistanceToTarget())
         evaluateMissionProximity()
     }
 
     private fun evaluateMissionProximity() {
-        if (!isWalkingActive || missionCompleted) return
+        if (!isWalkingActive) return
 
-        val distance = currentDistanceToTarget() ?: return
+        val destinationDistance = currentDistanceToTarget()
         if (missionInProgress) {
-            if (distance > missionExitRadiusMeter) {
-                stopMissionByExit(distance)
+            val missionTotem = activeMissionTotem ?: return
+            val missionDistance = currentDistanceToTotem(missionTotem)
+            if (missionDistance > missionExitRadiusMeter) {
+                stopMissionByExit(missionDistance)
             } else {
-                updateRouteDistanceStatus(distance)
+                updateRouteDistanceStatus(destinationDistance)
             }
             return
         }
 
-        updateRouteDistanceStatus(distance)
-        if (distance <= missionEnterRadiusMeter) {
-            startOneMinuteMission(distance)
+        updateRouteDistanceStatus(destinationDistance)
+        val nextTotem = nextUnvisitedTotem()
+        if (nextTotem == null) {
+            missionCompleted = true
+            isWalkingActive = false
+            return
+        }
+
+        if (currentDistanceToTotem(nextTotem) <= missionEnterRadiusMeter) {
+            startOneMinuteMission(nextTotem)
         }
     }
 
@@ -1041,51 +1101,61 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         return distanceMeter(currentLatitude, currentLongitude, targetLat, targetLng)
     }
 
-    private fun startOneMinuteMission(distance: Double) {
+    private fun startOneMinuteMission(totem: RouteTotem) {
         if (missionInProgress || missionCompleted) return
 
         missionStartedAt = nowIso()
         missionRemainingSeconds = missionDurationSeconds
+        missionGameScore = 0
         missionInProgress = true
         isAtSensorNode = true
-        blurOverlay.visibility = View.GONE
-        updateRouteDistanceStatus(distance)
-        Toast.makeText(this, "50m 반경 진입: 60초 미션이 시작되었습니다.", Toast.LENGTH_SHORT).show()
+        activeMissionTotem = totem
+        activeMissionGameType = missionGameTypeForTotem(totem)
+        Log.i(logTag, "mission started totem=${totem.id}, type=${activeMissionGameType.missionType}")
+        showMissionGamePanel(totem)
+        updateRouteDistanceStatus(currentDistanceToTarget())
+        Toast.makeText(
+            this,
+            "${totemDisplayName(totem.name)} 50m 반경 진입: 60초 미션 시작",
+            Toast.LENGTH_SHORT
+        ).show()
 
         missionTimer?.cancel()
         missionTimer = timer(initialDelay = 1000L, period = 1000L) {
             runOnUiThread {
                 if (!missionInProgress || missionCompleted) return@runOnUiThread
 
-                val currentDistance = currentDistanceToTarget()
-                if (currentDistance != null && currentDistance > missionExitRadiusMeter) {
-                    stopMissionByExit(currentDistance)
+                val missionTotem = activeMissionTotem ?: return@runOnUiThread
+                val missionDistance = currentDistanceToTotem(missionTotem)
+                if (missionDistance > missionExitRadiusMeter) {
+                    stopMissionByExit(missionDistance)
                     return@runOnUiThread
                 }
 
                 missionRemainingSeconds -= 1
-                updateRouteDistanceStatus(currentDistance)
+                updateMissionGameHeader()
+                updateRouteDistanceStatus(currentDistanceToTarget())
                 if (missionRemainingSeconds <= 0) {
                     completeOneMinuteMission()
+                } else {
+                    renderMissionRound()
                 }
             }
         }
     }
 
     private fun updateRouteDistanceStatus(destinationDistance: Double?) {
-        selectedRouteTotems
-            .filter { currentDistanceToTotem(it) <= missionEnterRadiusMeter }
-            .forEach { visitedTotemIds.add(it.id) }
-
         tvDestinationDistance.text = if (destinationDistance == null) {
             "목적지까지 계산 중"
         } else {
             "목적지까지 ${destinationDistance.toInt()}m"
         }
 
-        val nextTotem = nextUnvisitedTotem()
+        val nextTotem = activeMissionTotem ?: nextUnvisitedTotem()
         tvNextTotemDistance.text = if (nextTotem == null) {
-            "다음 토템까지 도착"
+            "모든 토템 미션 완료"
+        } else if (missionInProgress) {
+            "진행 중인 토템까지 ${currentDistanceToTotem(nextTotem).toInt()}m"
         } else {
             "다음 토템까지 ${currentDistanceToTotem(nextTotem).toInt()}m"
         }
@@ -1123,25 +1193,241 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun totemRouteName(routeName: String): String =
         routeName.replace("센서", "토템")
 
+    private fun missionGameTypeForTotem(totem: RouteTotem): MissionGameType {
+        val seed = totem.id.filter { it.isDigit() }.toIntOrNull() ?: totem.id.hashCode()
+        return when (Math.floorMod(seed, MissionGameType.entries.size)) {
+            0 -> MissionGameType.TAP_CIRCLE
+            1 -> MissionGameType.COLOR_MATCH
+            else -> MissionGameType.AIR_CLEAN
+        }
+    }
+
+    private fun showMissionGamePanel(totem: RouteTotem) {
+        routeOptionCard.visibility = View.GONE
+        blurOverlay.visibility = View.VISIBLE
+        missionGameCard.visibility = View.VISIBLE
+        tvMissionGameTitle.text = "${activeMissionGameType.title} · ${totemDisplayName(totem.name)}"
+        updateMissionGameHeader()
+        renderMissionRound()
+    }
+
+    private fun hideMissionGamePanel() {
+        if (!::missionGameCard.isInitialized) return
+        missionGameCard.visibility = View.GONE
+        if (::missionGameBoard.isInitialized) {
+            missionGameBoard.removeAllViews()
+        }
+        if (::blurOverlay.isInitialized) {
+            blurOverlay.visibility = View.GONE
+        }
+    }
+
+    private fun updateMissionGameHeader() {
+        if (!::tvMissionGameTimer.isInitialized) return
+        tvMissionGameTimer.text = "${missionRemainingSeconds}초"
+        tvMissionGameScore.text = "점수 $missionGameScore"
+    }
+
+    private fun addMissionGameScore(delta: Int) {
+        if (!missionInProgress) return
+
+        missionGameScore += delta
+        updateMissionGameHeader()
+        Log.i(
+            logTag,
+            "mission score totem=${activeMissionTotem?.id ?: "UNKNOWN"}, " +
+                "type=${activeMissionGameType.missionType}, score=$missionGameScore"
+        )
+    }
+
+    private fun renderMissionRound() {
+        if (!missionInProgress || !::missionGameBoard.isInitialized) return
+        updateMissionGameHeader()
+        when (activeMissionGameType) {
+            MissionGameType.TAP_CIRCLE -> renderTapCircleRound()
+            MissionGameType.COLOR_MATCH -> renderColorMatchRound()
+            MissionGameType.AIR_CLEAN -> renderAirCleanRound()
+        }
+    }
+
+    private fun renderTapCircleRound() {
+        tvMissionGamePrompt.text = "1초마다 나타나는 원을 터치하세요."
+        missionGameBoard.removeAllViews()
+        missionGameBoard.post {
+            if (!missionInProgress || activeMissionGameType != MissionGameType.TAP_CIRCLE) return@post
+            missionGameBoard.removeAllViews()
+            val size = dp(78)
+            val maxX = maxOf(0, missionGameBoard.width - size)
+            val maxY = maxOf(0, missionGameBoard.height - size)
+            val circle = TextView(this).apply {
+                text = "+1"
+                textSize = 18f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                background = ovalDrawable("#11CAA0")
+                setOnClickListener {
+                    addMissionGameScore(1)
+                    renderTapCircleRound()
+                }
+            }
+            missionGameBoard.addView(
+                circle,
+                FrameLayout.LayoutParams(size, size).apply {
+                    leftMargin = if (maxX > 0) Random.nextInt(maxX) else 0
+                    topMargin = if (maxY > 0) Random.nextInt(maxY) else 0
+                }
+            )
+        }
+    }
+
+    private fun renderColorMatchRound() {
+        missionGameBoard.removeAllViews()
+        colorMatchTargetIndex = Random.nextInt(missionColors.size)
+        val target = missionColors[colorMatchTargetIndex]
+        tvMissionGamePrompt.text = "제시된 색과 같은 버튼을 누르세요: ${target.label}"
+        missionGameBoard.addView(missionButtonGrid(missionColors.size) { index ->
+            val color = missionColors[index]
+            Button(this).apply {
+                text = color.label
+                textSize = 14f
+                setTextColor(if (color.label == "노랑") "#0E2E3A".toColorInt() else Color.WHITE)
+                setBackgroundColor(color.hex.toColorInt())
+                setOnClickListener {
+                    if (index == colorMatchTargetIndex) {
+                        addMissionGameScore(1)
+                    } else {
+                        updateMissionGameHeader()
+                    }
+                    renderColorMatchRound()
+                }
+            }
+        })
+    }
+
+    private fun renderAirCleanRound() {
+        missionGameBoard.removeAllViews()
+        tvMissionGamePrompt.text = "빨간 CO2 입자를 터치해 공기를 정화하세요."
+        val dirtyParticles = (0 until 6).shuffled().take(2).toSet()
+        missionGameBoard.addView(missionButtonGrid(6) { index ->
+            val isDirty = index in dirtyParticles
+            Button(this).apply {
+                text = if (isDirty) "CO2" else "맑음"
+                textSize = 13f
+                setTextColor(if (isDirty) Color.WHITE else "#0E2E3A".toColorInt())
+                setBackgroundColor(if (isDirty) "#D94B4B".toColorInt() else "#CDEFE7".toColorInt())
+                setOnClickListener {
+                    if (isDirty) {
+                        addMissionGameScore(1)
+                        renderAirCleanRound()
+                    }
+                }
+            }
+        })
+    }
+
+    private fun missionButtonGrid(
+        itemCount: Int,
+        buttonFactory: (Int) -> Button,
+    ): LinearLayout {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+        val rowCount = if (itemCount <= 4) 2 else 3
+        val columnCount = 2
+        var itemIndex = 0
+        repeat(rowCount) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            repeat(columnCount) {
+                if (itemIndex < itemCount) {
+                    row.addView(
+                        buttonFactory(itemIndex),
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                            setMargins(dp(4), dp(4), dp(4), dp(4))
+                        }
+                    )
+                } else {
+                    row.addView(
+                        View(this),
+                        LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                            setMargins(dp(4), dp(4), dp(4), dp(4))
+                        }
+                    )
+                }
+                itemIndex += 1
+            }
+            column.addView(
+                row,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f,
+                )
+            )
+        }
+        column.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        return column
+    }
+
+    private fun ovalDrawable(colorHex: String): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(colorHex.toColorInt())
+            setStroke(dp(3), Color.WHITE)
+        }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
     private fun completeOneMinuteMission() {
         missionTimer?.cancel()
         missionTimer = null
+        val completedTotem = activeMissionTotem ?: return
+        val completedGameType = activeMissionGameType
+        val completedScore = missionGameScore
+        val completedStartedAt = missionStartedAt.ifBlank { nowIso() }
+        Log.i(
+            logTag,
+            "mission completed totem=${completedTotem.id}, " +
+                "type=${completedGameType.missionType}, score=$completedScore"
+        )
         missionInProgress = false
-        missionCompleted = true
         isAtSensorNode = false
-        isWalkingActive = false
+        visitedTotemIds.add(completedTotem.id)
+        activeMissionTotem = null
+        hideMissionGamePanel()
+        missionCompleted = nextUnvisitedTotem() == null
+        isWalkingActive = !missionCompleted
         updateRouteDistanceStatus(currentDistanceToTarget())
-        sendCollectedSensorDataToServer()
+        sendCollectedSensorDataToServer(completedTotem, completedGameType, completedScore, completedStartedAt)
     }
 
     private fun stopMissionByExit(distance: Double) {
         missionTimer?.cancel()
         missionTimer = null
+        val stoppedTotem = activeMissionTotem
         missionInProgress = false
         isAtSensorNode = false
-        isWalkingActive = false
-        updateRouteDistanceStatus(distance)
-        Toast.makeText(this, "미션 반경을 벗어나 포인트가 지급되지 않았습니다.", Toast.LENGTH_SHORT).show()
+        if (stoppedTotem != null) {
+            visitedTotemIds.add(stoppedTotem.id)
+        }
+        Log.i(
+            logTag,
+            "mission exited totem=${stoppedTotem?.id ?: "UNKNOWN"}, " +
+                "distance=${"%.1f".format(Locale.US, distance)}m, score=$missionGameScore"
+        )
+        activeMissionTotem = null
+        hideMissionGamePanel()
+        missionCompleted = nextUnvisitedTotem() == null
+        isWalkingActive = !missionCompleted
+        updateRouteDistanceStatus(currentDistanceToTarget())
+        Toast.makeText(this, "토템 반경을 벗어나 미션이 종료되었습니다.", Toast.LENGTH_SHORT).show()
     }
 
     private fun resetMissionState(clearTarget: Boolean) {
@@ -1149,11 +1435,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         stepTimer = null
         missionTimer?.cancel()
         missionTimer = null
+        hideMissionGamePanel()
         sensorManager.unregisterListener(this@MainActivity)
         isWalkingActive = false
         isAtSensorNode = false
         missionInProgress = false
         missionCompleted = false
+        activeMissionTotem = null
+        missionGameScore = 0
         missionStartedAt = ""
         missionRemainingSeconds = missionDurationSeconds
         currentSteps = 0
@@ -1249,11 +1538,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    private fun sendCollectedSensorDataToServer() {
+    private fun sendCollectedSensorDataToServer(
+        totem: RouteTotem,
+        gameType: MissionGameType,
+        score: Int,
+        startedAt: String,
+    ) {
         val reportBody = JSONObject().apply {
             put("userId", userId)
-            put("sensorId", targetSensorId.ifBlank { sensorIdFromName(targetSensorName) })
-            put("sensorName", targetSensorName)
+            put("sensorId", totem.id)
+            put("sensorName", totem.name)
             put("temperature", 24.0)
             put("co2", 530)
             put("latitude", currentLatitude)
@@ -1266,8 +1560,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             try {
                 val conn = openPost(URL("$serverUrl/api/v1/sensor-readings"), reportBody)
                 if (conn.responseCode == 200) {
-                    sendMissionResultToServer()
+                    Log.i(logTag, "sensor reading saved totem=${totem.id}, score=$score")
+                    sendMissionResultToServer(totem, gameType, score, startedAt)
                 } else {
+                    Log.w(logTag, "sensor reading failed code=${conn.responseCode}, totem=${totem.id}")
                     runOnUiThread {
                         Toast.makeText(
                             this@MainActivity,
@@ -1277,6 +1573,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     }
                 }
             } catch (e: Exception) {
+                Log.e(logTag, "sensor reading submit error totem=${totem.id}", e)
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
@@ -1288,13 +1585,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
-    private fun sendMissionResultToServer() {
+    private fun sendMissionResultToServer(
+        totem: RouteTotem,
+        gameType: MissionGameType,
+        score: Int,
+        startedAt: String,
+    ) {
         val missionBody = JSONObject().apply {
             put("userId", userId)
-            put("startedSensorId", targetSensorId.ifBlank { sensorIdFromName(targetSensorName) })
-            put("missionType", "ONE_MINUTE_GAME")
-            put("score", missionScore)
-            put("startedAt", missionStartedAt.ifBlank { nowIso() })
+            put("startedSensorId", totem.id)
+            put("missionType", gameType.missionType)
+            put("score", score)
+            put("startedAt", startedAt)
             put("endedAt", nowIso())
         }
 
@@ -1304,24 +1606,33 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 val data = JSONObject(readResponse(conn)).getJSONObject("data")
                 val pointsEarned = data.getInt("earnedPoint")
                 val totalPoint = data.getInt("totalPoint")
+                Log.i(
+                    logTag,
+                    "mission result saved totem=${totem.id}, type=${gameType.missionType}, " +
+                        "score=$score, earnedPoint=$pointsEarned, totalPoint=$totalPoint"
+                )
 
                 runOnUiThread {
                     stepTimer?.cancel()
                     missionTimer?.cancel()
                     missionTimer = null
-                    sensorManager.unregisterListener(this@MainActivity)
                     cachedTotalPoint = totalPoint
                     tvUserPoints.text = "보유 포인트: ${formatPoint(totalPoint)} P"
-                    isWalkingActive = false
                     isAtSensorNode = false
+                    missionCompleted = nextUnvisitedTotem() == null
+                    isWalkingActive = !missionCompleted
                     Toast.makeText(
                         this@MainActivity,
-                        "토템 수집 보상 $pointsEarned P 적립 완료!",
+                        "${totemDisplayName(totem.name)} 미션 보상 $pointsEarned P 적립 완료!",
                         Toast.LENGTH_LONG
                     ).show()
+                    evaluateMissionProximity()
                 }
+            } else {
+                Log.w(logTag, "mission result failed code=${conn.responseCode}, totem=${totem.id}")
             }
         } catch (e: Exception) {
+            Log.e(logTag, "mission result submit error totem=${totem.id}", e)
             runOnUiThread {
                 Toast.makeText(
                     this@MainActivity,
