@@ -14,7 +14,8 @@ from route_geometry import (
 
 WALKING_SPEED_METER_PER_MINUTE = 72.0
 ROUTE_DISTANCE_BUDGET_MULTIPLIER = 1.5
-ROUTE_SEARCH_BEAM_WIDTH = 240
+DEFAULT_MAX_ROUTE_DISTANCE_METER = 3500
+ROUTE_SEARCH_BEAM_WIDTH = 420
 
 
 @dataclass(frozen=True)
@@ -37,20 +38,30 @@ class RouteCandidate:
 
 @dataclass(frozen=True)
 class RouteSearchState:
-    intermediate_indices: tuple[int, ...]
+    sensor_indices: tuple[int, ...]
     length_meter: int
+
+
+@dataclass(frozen=True)
+class RouteDistanceProfile:
+    key: str
+    name: str
+    min_meter: int
+    max_meter: int
 
 
 def recommend_routes(
     sensors: list[dict[str, Any]],
     current_latitude: float,
     current_longitude: float,
-    max_distance_meter: int = 2000,
+    max_distance_meter: int = DEFAULT_MAX_ROUTE_DISTANCE_METER,
     route_option_count: int = 2,
 ) -> list[dict[str, Any]]:
     current_access_point = snap_sensor_to_access_point(current_latitude, current_longitude)
     route_start_latitude = float(current_access_point["latitude"])
     route_start_longitude = float(current_access_point["longitude"])
+    profiles = route_distance_profiles(max_distance_meter)[:route_option_count]
+    search_max_meter = max(profile.max_meter for profile in profiles)
     candidates = []
     for sensor in sensors:
         latitude = float(sensor["latitude"])
@@ -62,7 +73,7 @@ def recommend_routes(
             access_point["routeLatitude"],
             access_point["routeLongitude"],
         )
-        if distance > max_distance_meter:
+        if distance > search_max_meter:
             continue
         candidates.append(
             RouteCandidate(
@@ -83,58 +94,84 @@ def recommend_routes(
             )
         )
 
+    candidates = unique_candidates_by_access_point(candidates)
     if not candidates:
         return []
 
-    shortage_order = sorted(candidates, key=shortage_sort_key)
-    target_sensor = shortage_order[0]
-    direct_distance = walking_distance_meter(
-        route_start_latitude,
-        route_start_longitude,
-        target_sensor.route_latitude,
-        target_sensor.route_longitude,
-    )
-    distance_budget = max(
-        direct_distance,
-        int(round(direct_distance * ROUTE_DISTANCE_BUDGET_MULTIPLIER)),
-    )
-    intermediate_candidates = selectable_intermediate_sensors(
-        sensors=shortage_order[1:],
-        target_sensor=target_sensor,
+    candidates = sorted(candidates, key=shortage_sort_key)
+    route_states = route_states_for_distance_profiles(
         current_latitude=route_start_latitude,
         current_longitude=route_start_longitude,
-        distance_budget=distance_budget,
+        candidates=candidates,
+        max_distance_meter=search_max_meter,
     )
-    route_states = route_states_with_max_sensor_coverage(
-        current_latitude=route_start_latitude,
-        current_longitude=route_start_longitude,
-        target_sensor=target_sensor,
-        intermediate_candidates=intermediate_candidates,
-        direct_distance=direct_distance,
-        distance_budget=distance_budget,
-        route_option_count=route_option_count,
-    )
+    if not route_states:
+        return []
 
     routes = []
-    for route_index, state in enumerate(route_states[:route_option_count]):
-        route_sensors = [
-            intermediate_candidates[index]
-            for index in state.intermediate_indices
-        ] + [target_sensor]
+    used_sensor_ids: set[str] = set()
+    used_access_points: set[tuple[float, float]] = set()
+    used_path_points: set[tuple[float, float]] = set()
+    used_paths: set[tuple[int, ...]] = set()
+
+    for profile in profiles:
+        state = select_route_state_for_profile(
+            states=route_states,
+            candidates=candidates,
+            profile=profile,
+            used_sensor_ids=used_sensor_ids,
+            used_access_points=used_access_points,
+            used_path_points=used_path_points,
+            used_paths=used_paths,
+            current_latitude=current_latitude,
+            current_longitude=current_longitude,
+        )
+        if state is None:
+            continue
+
+        route_sensors = [candidates[index] for index in state.sensor_indices]
+        target_sensor = route_sensors[-1]
+        direct_distance = walking_distance_meter(
+            route_start_latitude,
+            route_start_longitude,
+            target_sensor.route_latitude,
+            target_sensor.route_longitude,
+        )
         routes.append(
             format_route(
-                route_index=route_index,
+                route_index=len(routes),
                 current_latitude=current_latitude,
                 current_longitude=current_longitude,
                 route_sensors=route_sensors,
                 target_sensor=target_sensor,
                 direct_distance_meter=direct_distance,
-                distance_budget_meter=distance_budget,
-                route_strategy="shortage_target_max_sensor_coverage",
+                distance_budget_meter=profile.max_meter,
+                route_strategy="distance_band_shortage_overlap",
+                route_name=profile.name,
+                route_profile=profile,
+            )
+        )
+        used_paths.add(state.sensor_indices)
+        used_sensor_ids.update(sensor.sensor_id for sensor in route_sensors)
+        used_access_points.update(access_point_key(sensor) for sensor in route_sensors)
+        used_path_points.update(
+            route_point_keys(
+                current_latitude=current_latitude,
+                current_longitude=current_longitude,
+                route_sensors=route_sensors,
             )
         )
 
     return routes
+
+
+def route_distance_profiles(max_distance_meter: int) -> list[RouteDistanceProfile]:
+    long_max_meter = max(max_distance_meter, 2500)
+    return [
+        RouteDistanceProfile("short", "500m~1km 토템 산책", 500, 1000),
+        RouteDistanceProfile("medium", "1km~2km 토템 산책", 1000, 2000),
+        RouteDistanceProfile("long", "2km 이상 토템 산책", 2000, long_max_meter),
+    ]
 
 
 def shortage_sort_key(sensor: RouteCandidate) -> tuple[int, int, int, str]:
@@ -146,71 +183,33 @@ def shortage_sort_key(sensor: RouteCandidate) -> tuple[int, int, int, str]:
     )
 
 
-def selectable_intermediate_sensors(
-    sensors: list[RouteCandidate],
-    target_sensor: RouteCandidate,
+def unique_candidates_by_access_point(candidates: list[RouteCandidate]) -> list[RouteCandidate]:
+    unique: dict[tuple[float, float], RouteCandidate] = {}
+    for candidate in sorted(candidates, key=shortage_sort_key):
+        unique.setdefault(access_point_key(candidate), candidate)
+    return list(unique.values())
+
+
+def route_states_for_distance_profiles(
     current_latitude: float,
     current_longitude: float,
-    distance_budget: int,
-) -> list[RouteCandidate]:
-    selectable = []
-    used_access_points = {access_point_key(target_sensor)}
-    for sensor in sensors:
-        access_key = access_point_key(sensor)
-        if access_key in used_access_points:
-            continue
-
-        detour_distance = (
-            walking_distance_meter(
-                current_latitude,
-                current_longitude,
-                sensor.route_latitude,
-                sensor.route_longitude,
-            )
-            + walking_distance_meter(
-                sensor.route_latitude,
-                sensor.route_longitude,
-                target_sensor.route_latitude,
-                target_sensor.route_longitude,
-            )
-        )
-        if detour_distance <= distance_budget:
-            selectable.append(sensor)
-            used_access_points.add(access_key)
-
-    return selectable
-
-
-def route_states_with_max_sensor_coverage(
-    current_latitude: float,
-    current_longitude: float,
-    target_sensor: RouteCandidate,
-    intermediate_candidates: list[RouteCandidate],
-    direct_distance: int,
-    distance_budget: int,
-    route_option_count: int,
+    candidates: list[RouteCandidate],
+    max_distance_meter: int,
 ) -> list[RouteSearchState]:
-    empty_state = RouteSearchState(intermediate_indices=(), length_meter=direct_distance)
-    if not intermediate_candidates:
-        return [empty_state]
+    empty_state = RouteSearchState(sensor_indices=(), length_meter=0)
+    if not candidates:
+        return []
 
     distance_cache: dict[tuple[str, str], int] = {}
-
-    def node_key(index: int | str) -> str:
-        if index == "start" or index == "target":
-            return str(index)
-        return str(index)
 
     def node_coordinate(index: int | str) -> tuple[float, float]:
         if index == "start":
             return current_latitude, current_longitude
-        if index == "target":
-            return target_sensor.route_latitude, target_sensor.route_longitude
-        sensor = intermediate_candidates[int(index)]
+        sensor = candidates[int(index)]
         return sensor.route_latitude, sensor.route_longitude
 
     def path_distance(first: int | str, second: int | str) -> int:
-        cache_key = (node_key(first), node_key(second))
+        cache_key = (str(first), str(second))
         reverse_key = (cache_key[1], cache_key[0])
         if cache_key in distance_cache:
             return distance_cache[cache_key]
@@ -228,87 +227,135 @@ def route_states_with_max_sensor_coverage(
         distance_cache[cache_key] = distance
         return distance
 
-    def route_shortage_sum(state: RouteSearchState) -> int:
-        return sum(
-            intermediate_candidates[index].collected_count_today
-            for index in state.intermediate_indices
-        )
+    def state_value(state: RouteSearchState) -> int:
+        return route_shortage_score(state, candidates)
 
-    def state_sort_key(state: RouteSearchState) -> tuple[int, int, int, tuple[int, ...]]:
+    def beam_sort_key(state: RouteSearchState) -> tuple[int, int, int, int, tuple[int, ...]]:
         return (
-            -len(state.intermediate_indices),
+            -len(state.sensor_indices),
+            -state_value(state),
+            abs(1800 - state.length_meter),
             state.length_meter,
-            route_shortage_sum(state),
-            state.intermediate_indices,
+            state.sensor_indices,
         )
 
     beam = [empty_state]
-    best_by_path = {empty_state.intermediate_indices: empty_state}
+    best_by_path: dict[tuple[int, ...], RouteSearchState] = {}
 
-    for _ in range(len(intermediate_candidates)):
-        expanded_states = []
+    for _ in range(len(candidates)):
+        expanded_states: list[RouteSearchState] = []
         for state in beam:
-            used_indices = set(state.intermediate_indices)
-            for candidate_index in range(len(intermediate_candidates)):
+            used_indices = set(state.sensor_indices)
+            last_node: int | str = "start" if not state.sensor_indices else state.sensor_indices[-1]
+            for candidate_index in range(len(candidates)):
                 if candidate_index in used_indices:
                     continue
 
-                for insert_position in range(len(state.intermediate_indices) + 1):
-                    previous_node: int | str = (
-                        "start"
-                        if insert_position == 0
-                        else state.intermediate_indices[insert_position - 1]
-                    )
-                    next_node: int | str = (
-                        "target"
-                        if insert_position == len(state.intermediate_indices)
-                        else state.intermediate_indices[insert_position]
-                    )
-                    insertion_cost = (
-                        path_distance(previous_node, candidate_index)
-                        + path_distance(candidate_index, next_node)
-                        - path_distance(previous_node, next_node)
-                    )
-                    next_length = state.length_meter + insertion_cost
-                    if next_length > distance_budget:
-                        continue
+                next_length = state.length_meter + path_distance(last_node, candidate_index)
+                if next_length > max_distance_meter:
+                    continue
 
-                    next_path = (
-                        state.intermediate_indices[:insert_position]
-                        + (candidate_index,)
-                        + state.intermediate_indices[insert_position:]
-                    )
-                    previous_best = best_by_path.get(next_path)
-                    if previous_best and previous_best.length_meter <= next_length:
-                        continue
+                next_path = state.sensor_indices + (candidate_index,)
+                previous_best = best_by_path.get(next_path)
+                if previous_best and previous_best.length_meter <= next_length:
+                    continue
 
-                    next_state = RouteSearchState(
-                        intermediate_indices=next_path,
-                        length_meter=next_length,
-                    )
-                    best_by_path[next_path] = next_state
-                    expanded_states.append(next_state)
+                next_state = RouteSearchState(
+                    sensor_indices=next_path,
+                    length_meter=next_length,
+                )
+                best_by_path[next_path] = next_state
+                expanded_states.append(next_state)
 
         if not expanded_states:
             break
 
         beam = sorted(
             [*beam, *expanded_states],
-            key=state_sort_key,
+            key=beam_sort_key,
         )[:ROUTE_SEARCH_BEAM_WIDTH]
 
-    selected_states = []
-    seen_sensor_sets: set[frozenset[int]] = set()
-    for state in sorted(best_by_path.values(), key=state_sort_key):
-        sensor_set = frozenset(state.intermediate_indices)
-        if sensor_set in seen_sensor_sets:
-            continue
-        selected_states.append(state)
-        seen_sensor_sets.add(sensor_set)
-        if len(selected_states) >= route_option_count:
-            break
+    return sorted(best_by_path.values(), key=beam_sort_key)
 
-    return selected_states or [empty_state]
+
+def select_route_state_for_profile(
+    states: list[RouteSearchState],
+    candidates: list[RouteCandidate],
+    profile: RouteDistanceProfile,
+    used_sensor_ids: set[str],
+    used_access_points: set[tuple[float, float]],
+    used_path_points: set[tuple[float, float]],
+    used_paths: set[tuple[int, ...]],
+    current_latitude: float,
+    current_longitude: float,
+) -> RouteSearchState | None:
+    selectable_states = [
+        state
+        for state in states
+        if state.sensor_indices and state.sensor_indices not in used_paths
+    ]
+    if not selectable_states:
+        return None
+
+    def distance_penalty(length_meter: int) -> int:
+        if profile.min_meter <= length_meter <= profile.max_meter:
+            midpoint = (profile.min_meter + profile.max_meter) // 2
+            return abs(length_meter - midpoint)
+        if length_meter < profile.min_meter:
+            return profile.min_meter - length_meter
+        return length_meter - profile.max_meter
+
+    def state_sort_key(state: RouteSearchState) -> tuple[int, int, int, int, int, int, tuple[int, ...]]:
+        route_sensors = [candidates[index] for index in state.sensor_indices]
+        sensor_ids = {sensor.sensor_id for sensor in route_sensors}
+        access_points = {access_point_key(sensor) for sensor in route_sensors}
+        in_band = profile.min_meter <= state.length_meter <= profile.max_meter
+        return (
+            0 if in_band else 1,
+            len(sensor_ids & used_sensor_ids),
+            len(access_points & used_access_points),
+            -route_shortage_score(state, candidates),
+            -len(state.sensor_indices),
+            distance_penalty(state.length_meter),
+            state.sensor_indices,
+        )
+
+    return min(selectable_states, key=state_sort_key)
+
+
+def route_shortage_score(state: RouteSearchState, candidates: list[RouteCandidate]) -> int:
+    if not state.sensor_indices:
+        return 0
+    max_collected_count = max(candidate.collected_count_today for candidate in candidates) + 1
+    score = 0
+    for index in state.sensor_indices:
+        sensor = candidates[index]
+        score += max(1, max_collected_count - sensor.collected_count_today) * 10
+        score += 8 if not sensor.fresh else 0
+        score += 15
+    return score
+
+
+def route_point_keys(
+    current_latitude: float,
+    current_longitude: float,
+    route_sensors: list[RouteCandidate],
+) -> set[tuple[float, float]]:
+    route_points = build_route_points(
+        current_latitude=current_latitude,
+        current_longitude=current_longitude,
+        route_stops=[
+            {
+                "routeLatitude": sensor.route_latitude,
+                "routeLongitude": sensor.route_longitude,
+            }
+            for sensor in route_sensors
+        ],
+    )
+    return {
+        (round(point["latitude"], 5), round(point["longitude"], 5))
+        for point in route_points
+    }
 
 
 def access_point_key(sensor: RouteCandidate) -> tuple[float, float]:
@@ -324,6 +371,8 @@ def format_route(
     direct_distance_meter: int,
     distance_budget_meter: int,
     route_strategy: str,
+    route_name: str | None = None,
+    route_profile: RouteDistanceProfile | None = None,
 ) -> dict[str, Any]:
     route_points = build_route_points(
         current_latitude=current_latitude,
@@ -351,8 +400,13 @@ def format_route(
 
     return {
         "routeId": f"ROUTE_{route_index + 1:03d}",
-        "routeName": route_name(route_index),
+        "routeName": route_name or default_route_name(route_index),
         "routeStrategy": route_strategy,
+        "routeProfile": {
+            "key": route_profile.key,
+            "minDistanceMeter": route_profile.min_meter,
+            "maxDistanceMeter": route_profile.max_meter,
+        } if route_profile else None,
         "directDistanceMeter": direct_distance_meter,
         "distanceBudgetMeter": distance_budget_meter,
         "budgetMultiplier": ROUTE_DISTANCE_BUDGET_MULTIPLIER,
@@ -372,7 +426,7 @@ def format_route(
     }
 
 
-def route_name(route_index: int) -> str:
+def default_route_name(route_index: int) -> str:
     names = [
         "최대 경유 센서 경로",
         "짧은 보강 대안 경로",

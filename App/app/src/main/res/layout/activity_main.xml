@@ -16,7 +16,7 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="match_parent"
             android:orientation="vertical"
             android:padding="18dp">
 
@@ -44,6 +44,14 @@
                     android:textColor="#005088"
                     android:textSize="13sp" />
             </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:paddingBottom="96dp">
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
@@ -89,19 +97,10 @@
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/tvWeatherWindow"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="캠퍼스 내 센서의 평균"
-                        android:textColor="#CDEFE7"
-                        android:textSize="12sp" />
-
-                    <TextView
                         android:id="@+id/tvWeatherUpdateNote"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="3dp"
+                        android:layout_marginTop="12dp"
                         android:text="5분마다 자동 업데이트"
                         android:textColor="#CDEFE7"
                         android:textSize="12sp" />
@@ -162,6 +161,7 @@
                 android:layout_width="1dp"
                 android:layout_height="1dp"
                 android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 
@@ -491,66 +491,51 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="12dp">
-
-                <Button
-                    android:id="@+id/btnBackHome"
-                    android:layout_width="72dp"
-                    android:layout_height="42dp"
-                    android:backgroundTint="#F6F4EA"
-                    android:text="홈"
-                    android:textColor="#005088" />
-
-                <TextView
-                    android:id="@+id/tvMapHeader"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1"
-                    android:text="경로 안내 준비 중"
-                    android:textColor="#F6F4EA"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/nextSensorCard"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="12dp"
-            android:layout_marginTop="8dp"
-            app:cardBackgroundColor="#FFFFFF"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="4dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/recommendationCard">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="12dp">
 
-                <TextView
-                    android:id="@+id/tvNextSensorInfo"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="타겟 센서 노드: 대기 중..."
-                    android:textColor="#2E4D68"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btnBackHome"
+                        android:layout_width="72dp"
+                        android:layout_height="42dp"
+                        android:backgroundTint="#F6F4EA"
+                        android:text="홈"
+                        android:textColor="#005088" />
+
+                    <TextView
+                        android:id="@+id/tvMapHeader"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:text="경로 안내 준비 중"
+                        android:textColor="#F6F4EA"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
-                    android:id="@+id/tvStepCounter"
+                    android:id="@+id/tvDestinationDistance"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="현재 산책 걸음 수: 0 걸음"
-                    android:textColor="#64748B"
+                    android:layout_marginTop="10dp"
+                    android:text="목적지까지 --m"
+                    android:textColor="#F6F4EA"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/tvNextTotemDistance"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="다음 토템까지 --m"
+                    android:textColor="#CDEFE7"
                     android:textSize="13sp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -561,7 +546,8 @@
             android:layout_height="0dp"
             android:layout_marginHorizontal="8dp"
             android:layout_marginTop="8dp"
-            app:layout_constraintBottom_toTopOf="@id/missionCard"
+            android:layout_marginBottom="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/routeOptionCard" />
@@ -578,7 +564,7 @@
             app:cardElevation="4dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/nextSensorCard">
+            app:layout_constraintTop_toBottomOf="@id/recommendationCard">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -637,66 +623,5 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/missionCard"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="#FFFFFF"
-            app:cardCornerRadius="8dp"
-            app:cardElevation="10dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <ImageView
-                    android:id="@+id/ivMissionIcon"
-                    android:layout_width="52dp"
-                    android:layout_height="52dp"
-                    android:layout_marginBottom="12dp"
-                    android:src="@android:drawable/ic_dialog_map"
-                    app:tint="#005088" />
-
-                <TextView
-                    android:id="@+id/tvMissionTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:text="경로 생성 대기"
-                    android:textColor="#005088"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvMissionDesc"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
-                    android:text="메인 화면에서 경로 안내를 요청하면 데이터가 부족한 센서 쪽으로 이동합니다."
-                    android:textColor="#64748B"
-                    android:textSize="13sp" />
-
-                <Button
-                    android:id="@+id/btnStartWalk"
-                    android:layout_width="match_parent"
-                    android:layout_height="52dp"
-                    android:layout_marginTop="18dp"
-                    android:backgroundTint="#005088"
-                    android:text="경로 다시 생성"
-                    android:textColor="#F6F4EA"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </androidx.cardview.widget.CardView>
     </androidx.constraintlayout.widget.ConstraintLayout>
 </FrameLayout>

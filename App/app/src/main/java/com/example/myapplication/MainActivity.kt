@@ -86,14 +86,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var rankingContainer: View
     private lateinit var rewardContainer: View
     private lateinit var blurOverlay: View
-    private lateinit var missionCard: CardView
     private lateinit var btnRequestRoute: Button
     private lateinit var btnRefreshDashboard: Button
     private lateinit var btnRanking: Button
     private lateinit var btnLogin: Button
     private lateinit var btnReward: Button
     private lateinit var btnBackHome: Button
-    private lateinit var btnStartWalk: Button
     private lateinit var btnLoginBackHome: Button
     private lateinit var btnSubmitLogin: Button
     private lateinit var btnRankingBackHome: Button
@@ -108,17 +106,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var tvWalkRecommendation: TextView
     private lateinit var tvWeatherTemperature: TextView
     private lateinit var tvWeatherCo2: TextView
-    private lateinit var tvWeatherWindow: TextView
     private lateinit var tvWeatherUpdateNote: TextView
     private lateinit var tvLocationStatus: TextView
     private lateinit var tvRankingPreview: TextView
     private lateinit var tvRankingList: TextView
     private lateinit var tvMapHeader: TextView
-    private lateinit var tvNextSensorInfo: TextView
+    private lateinit var tvDestinationDistance: TextView
+    private lateinit var tvNextTotemDistance: TextView
     private lateinit var tvUserPoints: TextView
-    private lateinit var tvStepCounter: TextView
-    private lateinit var tvMissionTitle: TextView
-    private lateinit var tvMissionDesc: TextView
     private lateinit var etLoginId: EditText
     private lateinit var etLoginPassword: EditText
 
@@ -129,6 +124,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var routePathOverlay: PathOverlay? = null
     private var pendingRouteDisplay: PendingRouteDisplay? = null
     private val routeOptions = mutableListOf<PendingRouteDisplay>()
+    private val selectedRouteTotems = mutableListOf<RouteTotem>()
+    private val visitedTotemIds = mutableSetOf<String>()
 
     private var isWalkingActive = false
     private var isAtSensorNode = false
@@ -136,8 +133,20 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var startStepCount = 0
     private var targetSensorName = ""
     private var targetSensorId = ""
+    private var targetRouteLatitude: Double? = null
+    private var targetRouteLongitude: Double? = null
     private var stepTimer: Timer? = null
+    private var missionTimer: Timer? = null
+    private var missionStartedAt = ""
+    private var missionRemainingSeconds = 60
+    private var missionInProgress = false
+    private var missionCompleted = false
     private var cachedTotalPoint = 0
+
+    private val missionEnterRadiusMeter = 50.0
+    private val missionExitRadiusMeter = 60.0
+    private val missionDurationSeconds = 60
+    private val missionScore = 15
 
     private lateinit var sensorManager: SensorManager
     private var stepCounterSensor: Sensor? = null
@@ -161,6 +170,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val routeBasis: String,
         val targetSensorName: String,
         val targetSensorId: String,
+        val targetRouteLatitude: Double,
+        val targetRouteLongitude: Double,
+    )
+
+    private data class RouteTotem(
+        val id: String,
+        val name: String,
+        val routeLatitude: Double,
+        val routeLongitude: Double,
+        val visitOrder: Int,
+        val isTarget: Boolean,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -174,14 +194,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         rewardContainer = findViewById(R.id.rewardContainer)
         mapView = findViewById(R.id.mapView)
         blurOverlay = findViewById(R.id.blurOverlay)
-        missionCard = findViewById(R.id.missionCard)
         btnRequestRoute = findViewById(R.id.btnRequestRoute)
         btnRefreshDashboard = findViewById(R.id.btnRefreshDashboard)
         btnRanking = findViewById(R.id.btnRanking)
         btnLogin = findViewById(R.id.btnLogin)
         btnReward = findViewById(R.id.btnReward)
         btnBackHome = findViewById(R.id.btnBackHome)
-        btnStartWalk = findViewById(R.id.btnStartWalk)
         btnLoginBackHome = findViewById(R.id.btnLoginBackHome)
         btnSubmitLogin = findViewById(R.id.btnSubmitLogin)
         btnRankingBackHome = findViewById(R.id.btnRankingBackHome)
@@ -196,17 +214,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tvWalkRecommendation = findViewById(R.id.tvWalkRecommendation)
         tvWeatherTemperature = findViewById(R.id.tvWeatherTemperature)
         tvWeatherCo2 = findViewById(R.id.tvWeatherCo2)
-        tvWeatherWindow = findViewById(R.id.tvWeatherWindow)
         tvWeatherUpdateNote = findViewById(R.id.tvWeatherUpdateNote)
         tvLocationStatus = findViewById(R.id.tvLocationStatus)
         tvRankingPreview = findViewById(R.id.tvRankingPreview)
         tvRankingList = findViewById(R.id.tvRankingList)
         tvMapHeader = findViewById(R.id.tvMapHeader)
-        tvNextSensorInfo = findViewById(R.id.tvNextSensorInfo)
+        tvDestinationDistance = findViewById(R.id.tvDestinationDistance)
+        tvNextTotemDistance = findViewById(R.id.tvNextTotemDistance)
         tvUserPoints = findViewById(R.id.tvUserPoints)
-        tvStepCounter = findViewById(R.id.tvStepCounter)
-        tvMissionTitle = findViewById(R.id.tvMissionTitle)
-        tvMissionDesc = findViewById(R.id.tvMissionDesc)
         etLoginId = findViewById(R.id.etLoginId)
         etLoginPassword = findViewById(R.id.etLoginPassword)
 
@@ -298,17 +313,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         btnExchange12000.setOnClickListener {
             if (requireLogin()) confirmRewardExchange(1000000, 12000)
-        }
-
-        btnStartWalk.setOnClickListener {
-            if (!requireLogin("route")) return@setOnClickListener
-            if (!isWalkingActive) {
-                requestActiveRouteGeneration()
-            } else if (isAtSensorNode) {
-                sendCollectedSensorDataToServer()
-            } else {
-                Toast.makeText(this, "라즈베리파이 BLE 신호 감지 범위 밖입니다.", Toast.LENGTH_SHORT).show()
-            }
         }
     }
 
@@ -495,7 +499,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     tvWalkRecommendation.text = "오늘의 날씨"
                     tvWeatherTemperature.text = "기온 : ${tempAvg}℃"
                     tvWeatherCo2.text = "CO2: ${co2Avg}ppm"
-                    tvWeatherWindow.text = "캠퍼스 내 센서의 평균"
                     tvWeatherUpdateNote.text = "5분마다 자동 업데이트"
                     tvUserPoints.text = "보유 포인트: ${formatPoint(totalPoint)} P"
                 }
@@ -504,7 +507,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     tvWalkRecommendation.text = "오늘의 날씨"
                     tvWeatherTemperature.text = "기온 : --℃"
                     tvWeatherCo2.text = "CO2: --ppm"
-                    tvWeatherWindow.text = "서버 연결 후 새로고침이 필요합니다."
                     tvWeatherUpdateNote.text = "5분마다 자동 업데이트"
                 }
             }
@@ -632,6 +634,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun showHomeScreen() {
+        if (::sensorManager.isInitialized) {
+            resetMissionState(clearTarget = true)
+        }
         homeContainer.visibility = View.VISIBLE
         loginContainer.visibility = View.GONE
         mapContainer.visibility = View.GONE
@@ -736,6 +741,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         runOnUiThread {
             updateLocationStatus()
             updateLocationOverlay()
+            evaluateMissionProximity()
         }
     }
 
@@ -803,31 +809,23 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun requestActiveRouteGeneration() {
-        isWalkingActive = false
-        isAtSensorNode = false
+        resetMissionState(clearTarget = true)
         showMapScreen()
         blurOverlay.visibility = View.GONE
         blurOverlay.alpha = 0.4f
         clearRouteOverlays()
         routeOptions.clear()
         routeOptionCard.visibility = View.GONE
-        stepTimer?.cancel()
-        sensorManager.unregisterListener(this@MainActivity)
         tvMapHeader.text = "현재 위치 기준 경로 생성 중"
-        tvNextSensorInfo.text = "추천 경로를 불러오는 중..."
-        tvStepCounter.text = "현재 산책 걸음 수: 0 걸음"
-        tvMissionTitle.text = "경로 추천 요청 중"
-        tvMissionDesc.text = "Firebase의 센서별 수집량과 보행로 그래프를 기준으로 3개의 후보 경로를 생성하고 있습니다."
-        btnStartWalk.text = "경로 생성 중..."
-        btnStartWalk.setBackgroundColor("#005088".toColorInt())
-        btnStartWalk.isEnabled = false
+        tvDestinationDistance.text = "목적지까지 계산 중"
+        tvNextTotemDistance.text = "다음 토템까지 계산 중"
 
         val routeStart = routeStartCoordinate()
         val requestBody = JSONObject().apply {
             put("userId", userId)
             put("currentLatitude", routeStart.latitude)
             put("currentLongitude", routeStart.longitude)
-            put("maxDistanceMeter", 2000)
+            put("maxDistanceMeter", 3500)
             put("routeOptionCount", 3)
         }
 
@@ -869,6 +867,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                             routeBasis = routeBasis,
                             targetSensorName = targetSensor.getString("sensorName"),
                             targetSensorId = targetSensor.getString("sensorId"),
+                            targetRouteLatitude = targetSensor.getDouble("routeLatitude"),
+                            targetRouteLongitude = targetSensor.getDouble("routeLongitude"),
                         )
                     )
                 }
@@ -896,17 +896,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         routeOptionCard.visibility = View.VISIBLE
 
         tvMapHeader.text = "추천 경로 선택"
-        val targetName = routeOptions.firstOrNull()?.targetSensorName.orEmpty()
-        tvNextSensorInfo.text = if (targetName.isBlank()) {
-            "${routeOptions.size}개 후보 중 하나를 선택하세요."
-        } else {
-            "목표 센서: $targetName · ${routeOptions.size}개 후보 중 선택"
-        }
-        tvMissionTitle.text = "추천 경로 선택"
-        tvMissionDesc.text = "가장 데이터가 부족한 센서를 목표로, 1.5배 거리 안에서 더 많은 센서를 지나는 경로를 선택합니다."
-        btnStartWalk.text = "경로를 선택해주세요"
-        btnStartWalk.setBackgroundColor(Color.GRAY)
-        btnStartWalk.isEnabled = false
+        tvDestinationDistance.text = "목적지까지 --m"
+        tvNextTotemDistance.text = "${routeOptions.size}개 후보 중 하나를 선택하세요"
 
         updateRouteOptionButton(btnRouteOption1, 0)
         updateRouteOptionButton(btnRouteOption2, 1)
@@ -922,7 +913,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val option = routeOptions[index]
         button.visibility = View.VISIBLE
         button.text =
-            "${index + 1}. ${option.routeName} · ${option.distanceMeter}m · ${option.timeMinute}분 · ${option.sensors.length()}개 센서"
+            "${index + 1}. ${totemRouteName(option.routeName)} · ${option.distanceMeter}m · ${option.timeMinute}분 · ${option.sensors.length()}개 토템"
         button.setBackgroundColor(
             if (index == 0) "#005088".toColorInt() else "#EDF7F5".toColorInt()
         )
@@ -964,17 +955,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 sensor.optString("sensorId") == targetSensorId
             val marker = Marker().apply {
                 position = LatLng(routeLat, routeLng)
+                val totemName = totemDisplayName(sensor.getString("sensorName"))
                 captionText = if (isTargetSensor) {
-                    "목표. ${sensor.getString("sensorName")}"
+                    "목표 토템. $totemName"
                 } else {
-                    "${sensor.getInt("visitOrder")}. ${sensor.getString("sensorName")}"
+                    "${sensor.getInt("visitOrder")}. $totemName"
                 }
                 captionTextSize = 12f
                 iconTintColor = if (isTargetSensor) "#11CAA0".toColorInt() else "#005088".toColorInt()
                 setOnClickListener {
                     Toast.makeText(
                         this@MainActivity,
-                        "${sensor.getString("sensorName")} / 오늘 ${sensor.getInt("collectedCountToday")}회 수집",
+                        "$totemName / 오늘 ${sensor.getInt("collectedCountToday")}회 수집",
                         Toast.LENGTH_SHORT
                     ).show()
                     true
@@ -987,62 +979,192 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun showSelectedRoute(routeDisplay: PendingRouteDisplay) {
+        resetMissionState(clearTarget = false)
         targetSensorName = routeDisplay.targetSensorName
         targetSensorId = routeDisplay.targetSensorId
+        targetRouteLatitude = routeDisplay.targetRouteLatitude
+        targetRouteLongitude = routeDisplay.targetRouteLongitude
+        selectedRouteTotems.clear()
+        selectedRouteTotems.addAll(parseRouteTotems(routeDisplay.sensors))
 
         if (!drawRecommendedRoute(routeDisplay.routePoints, routeDisplay.sensors)) {
             pendingRouteDisplay = routeDisplay
             Log.i(logTag, "route display pending until map is ready")
             tvMapHeader.text = "지도 로딩 중"
-            tvNextSensorInfo.text = "경로는 생성되었습니다. 지도가 준비되면 자동으로 표시됩니다."
-            btnStartWalk.text = "지도 준비 중..."
-            btnStartWalk.setBackgroundColor(Color.GRAY)
-            btnStartWalk.isEnabled = false
+            tvDestinationDistance.text = "목적지까지 계산 중"
+            tvNextTotemDistance.text = "다음 토템까지 계산 중"
             return
         }
 
-        tvMapHeader.text = routeDisplay.routeName
-        tvNextSensorInfo.text =
-            "목표 센서: $targetSensorName / ${routeDisplay.distanceMeter}m / " +
-                "${routeDisplay.timeMinute}분 / 인증 반경 ${routeDisplay.missionRadiusMeter}m / " +
-                routeDisplay.routeBasis
-        tvMissionTitle.text = "취약 데이터 거점으로 이동 중"
-        tvMissionDesc.text =
-            "${routeDisplay.sensors.length()}개 센서를 지나 $targetSensorName 접근 지점으로 이동해 데이터를 보강하십시오."
-        btnStartWalk.text = "거점 하드웨어 신호 탐색 중..."
-        btnStartWalk.setBackgroundColor(Color.GRAY)
-        btnStartWalk.isEnabled = false
-        startWalkingProgress()
+        tvMapHeader.text = totemRouteName(routeDisplay.routeName)
+        startMissionProximityMonitoring()
         Toast.makeText(
             this@MainActivity,
-            "추천 경로 표시 완료: ${routeDisplay.sensors.length()}개 거점",
+            "추천 경로 표시 완료: ${routeDisplay.sensors.length()}개 토템",
             Toast.LENGTH_SHORT
         ).show()
         Log.i(logTag, "route displayed points=${routeDisplay.routePoints.size}, sensors=${routeDisplay.sensors.length()}")
-        startRealBleHardwareScanning()
     }
 
-    private fun startWalkingProgress() {
-        stepTimer?.cancel()
-        sensorManager.unregisterListener(this@MainActivity)
-
+    private fun startMissionProximityMonitoring() {
         isWalkingActive = true
         isAtSensorNode = false
-        startStepCount = 0
-        currentSteps = 0
-        tvStepCounter.text = "현재 산책 걸음 수: 0 걸음"
+        missionInProgress = false
+        missionCompleted = false
+        missionRemainingSeconds = missionDurationSeconds
+        updateRouteDistanceStatus(currentDistanceToTarget())
+        evaluateMissionProximity()
+    }
 
-        stepCounterSensor?.let { sensor ->
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
-        } ?: run {
-            stepTimer = timer(period = 500) {
-                runOnUiThread {
-                    if (isWalkingActive && !isAtSensorNode) {
-                        currentSteps += (1..3).random()
-                        tvStepCounter.text = "현재 산책 걸음 수: $currentSteps 걸음"
-                    }
+    private fun evaluateMissionProximity() {
+        if (!isWalkingActive || missionCompleted) return
+
+        val distance = currentDistanceToTarget() ?: return
+        if (missionInProgress) {
+            if (distance > missionExitRadiusMeter) {
+                stopMissionByExit(distance)
+            } else {
+                updateRouteDistanceStatus(distance)
+            }
+            return
+        }
+
+        updateRouteDistanceStatus(distance)
+        if (distance <= missionEnterRadiusMeter) {
+            startOneMinuteMission(distance)
+        }
+    }
+
+    private fun currentDistanceToTarget(): Double? {
+        val targetLat = targetRouteLatitude ?: return null
+        val targetLng = targetRouteLongitude ?: return null
+        return distanceMeter(currentLatitude, currentLongitude, targetLat, targetLng)
+    }
+
+    private fun startOneMinuteMission(distance: Double) {
+        if (missionInProgress || missionCompleted) return
+
+        missionStartedAt = nowIso()
+        missionRemainingSeconds = missionDurationSeconds
+        missionInProgress = true
+        isAtSensorNode = true
+        blurOverlay.visibility = View.GONE
+        updateRouteDistanceStatus(distance)
+        Toast.makeText(this, "50m 반경 진입: 60초 미션이 시작되었습니다.", Toast.LENGTH_SHORT).show()
+
+        missionTimer?.cancel()
+        missionTimer = timer(initialDelay = 1000L, period = 1000L) {
+            runOnUiThread {
+                if (!missionInProgress || missionCompleted) return@runOnUiThread
+
+                val currentDistance = currentDistanceToTarget()
+                if (currentDistance != null && currentDistance > missionExitRadiusMeter) {
+                    stopMissionByExit(currentDistance)
+                    return@runOnUiThread
+                }
+
+                missionRemainingSeconds -= 1
+                updateRouteDistanceStatus(currentDistance)
+                if (missionRemainingSeconds <= 0) {
+                    completeOneMinuteMission()
                 }
             }
+        }
+    }
+
+    private fun updateRouteDistanceStatus(destinationDistance: Double?) {
+        selectedRouteTotems
+            .filter { currentDistanceToTotem(it) <= missionEnterRadiusMeter }
+            .forEach { visitedTotemIds.add(it.id) }
+
+        tvDestinationDistance.text = if (destinationDistance == null) {
+            "목적지까지 계산 중"
+        } else {
+            "목적지까지 ${destinationDistance.toInt()}m"
+        }
+
+        val nextTotem = nextUnvisitedTotem()
+        tvNextTotemDistance.text = if (nextTotem == null) {
+            "다음 토템까지 도착"
+        } else {
+            "다음 토템까지 ${currentDistanceToTotem(nextTotem).toInt()}m"
+        }
+    }
+
+    private fun parseRouteTotems(sensors: JSONArray): List<RouteTotem> {
+        val totems = mutableListOf<RouteTotem>()
+        for (index in 0 until sensors.length()) {
+            val sensor = sensors.getJSONObject(index)
+            totems.add(
+                RouteTotem(
+                    id = sensor.optString("sensorId", "TOTEM_$index"),
+                    name = sensor.optString("sensorName", "Totem ${index + 1}"),
+                    routeLatitude = sensor.optDouble("routeLatitude", sensor.optDouble("latitude")),
+                    routeLongitude = sensor.optDouble("routeLongitude", sensor.optDouble("longitude")),
+                    visitOrder = sensor.optInt("visitOrder", index + 1),
+                    isTarget = sensor.optBoolean("isTarget", false),
+                )
+            )
+        }
+        return totems.sortedWith(compareBy<RouteTotem> { it.visitOrder }.thenBy { it.id })
+    }
+
+    private fun nextUnvisitedTotem(): RouteTotem? =
+        selectedRouteTotems.firstOrNull { it.id !in visitedTotemIds }
+
+    private fun currentDistanceToTotem(totem: RouteTotem): Double =
+        distanceMeter(currentLatitude, currentLongitude, totem.routeLatitude, totem.routeLongitude)
+
+    private fun totemDisplayName(sensorName: String): String =
+        sensorName
+            .replace("sensor", "토템", ignoreCase = true)
+            .replace("SENSOR", "토템", ignoreCase = true)
+
+    private fun totemRouteName(routeName: String): String =
+        routeName.replace("센서", "토템")
+
+    private fun completeOneMinuteMission() {
+        missionTimer?.cancel()
+        missionTimer = null
+        missionInProgress = false
+        missionCompleted = true
+        isAtSensorNode = false
+        isWalkingActive = false
+        updateRouteDistanceStatus(currentDistanceToTarget())
+        sendCollectedSensorDataToServer()
+    }
+
+    private fun stopMissionByExit(distance: Double) {
+        missionTimer?.cancel()
+        missionTimer = null
+        missionInProgress = false
+        isAtSensorNode = false
+        isWalkingActive = false
+        updateRouteDistanceStatus(distance)
+        Toast.makeText(this, "미션 반경을 벗어나 포인트가 지급되지 않았습니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun resetMissionState(clearTarget: Boolean) {
+        stepTimer?.cancel()
+        stepTimer = null
+        missionTimer?.cancel()
+        missionTimer = null
+        sensorManager.unregisterListener(this@MainActivity)
+        isWalkingActive = false
+        isAtSensorNode = false
+        missionInProgress = false
+        missionCompleted = false
+        missionStartedAt = ""
+        missionRemainingSeconds = missionDurationSeconds
+        currentSteps = 0
+        startStepCount = 0
+        visitedTotemIds.clear()
+        if (clearTarget) {
+            targetSensorName = ""
+            targetSensorId = ""
+            targetRouteLatitude = null
+            targetRouteLongitude = null
+            selectedRouteTotems.clear()
         }
     }
 
@@ -1051,13 +1173,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             Log.w(logTag, message)
             routeOptions.clear()
             routeOptionCard.visibility = View.GONE
-            stepTimer?.cancel()
-            sensorManager.unregisterListener(this@MainActivity)
-            isWalkingActive = false
-            isAtSensorNode = false
-            btnStartWalk.text = "데이터 가뭄 해소 산책 시작"
-            btnStartWalk.setBackgroundColor("#005088".toColorInt())
-            btnStartWalk.isEnabled = true
+            resetMissionState(clearTarget = true)
+            tvDestinationDistance.text = "목적지까지 --m"
+            tvNextTotemDistance.text = "다음 토템까지 --m"
             Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
         }
     }
@@ -1114,12 +1232,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
                     runOnUiThread {
                         blurOverlay.visibility = View.GONE
-                        tvMissionTitle.text = "거점 연결 안착 성공"
-                        tvMissionDesc.text =
-                            "라즈베리파이 센서노드의 BLE 전파 권역 내에 들어왔습니다.\n체류 데이터를 Firebase로 전송하십시오."
-                        btnStartWalk.text = "거점 체류 인증 및 데이터 전송"
-                        btnStartWalk.setBackgroundColor("#11CAA0".toColorInt())
-                        btnStartWalk.isEnabled = true
+                        Toast.makeText(
+                            this@MainActivity,
+                            "토템 연결 범위에 들어왔습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             }
@@ -1150,6 +1267,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 val conn = openPost(URL("$serverUrl/api/v1/sensor-readings"), reportBody)
                 if (conn.responseCode == 200) {
                     sendMissionResultToServer()
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "토템 데이터 저장에 실패했습니다.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -1168,8 +1293,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             put("userId", userId)
             put("startedSensorId", targetSensorId.ifBlank { sensorIdFromName(targetSensorName) })
             put("missionType", "ONE_MINUTE_GAME")
-            put("score", 15)
-            put("startedAt", nowIso())
+            put("score", missionScore)
+            put("startedAt", missionStartedAt.ifBlank { nowIso() })
             put("endedAt", nowIso())
         }
 
@@ -1182,20 +1307,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
                 runOnUiThread {
                     stepTimer?.cancel()
+                    missionTimer?.cancel()
+                    missionTimer = null
                     sensorManager.unregisterListener(this@MainActivity)
                     cachedTotalPoint = totalPoint
                     tvUserPoints.text = "보유 포인트: ${formatPoint(totalPoint)} P"
-
-                    tvMissionTitle.text = "크라우드 소싱 미션 클리어"
-                    tvMissionDesc.text =
-                        "수집된 로그가 Firebase에 반영되었습니다.\n보상 포인트가 성공적으로 지급되었습니다."
-                    btnStartWalk.text = "새로운 취약 산책로 탐색"
-                    btnStartWalk.setBackgroundColor("#005088".toColorInt())
                     isWalkingActive = false
                     isAtSensorNode = false
                     Toast.makeText(
                         this@MainActivity,
-                        "센서 수집 보상 $pointsEarned P 적립 완료!",
+                        "토템 수집 보상 $pointsEarned P 적립 완료!",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1212,13 +1333,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_STEP_COUNTER) {
-            if (startStepCount == 0) {
-                startStepCount = event.values[0].toInt()
-            }
-            currentSteps = event.values[0].toInt() - startStepCount
-            tvStepCounter.text = "현재 산책 걸음 수: $currentSteps 걸음"
-        }
+        // Step counting is intentionally disabled. Missions now use 50m proximity.
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -1251,13 +1366,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                         if (lat == 0.0 && lng == 0.0) continue
 
                         val sensorName = sensor.optString("sensorName", "Unknown")
+                        val totemName = totemDisplayName(sensorName)
                         val temp = sensor.optDouble("temperature", 0.0)
                         val co2 = sensor.optInt("co2", 0)
                         val fresh = sensor.optBoolean("fresh", false)
 
                         val marker = Marker().apply {
                             position = LatLng(lat, lng)
-                            captionText = "$sensorName\n${co2}ppm\n${temp}°C"
+                            captionText = "$totemName\n${co2}ppm\n${temp}°C"
                             captionTextSize = 11f
                             iconTintColor = when {
                                 !fresh -> Color.GRAY
@@ -1268,7 +1384,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                             setOnClickListener {
                                 Toast.makeText(
                                     this@MainActivity,
-                                    "$sensorName\n${temp}°C / ${co2}ppm",
+                                    "$totemName\n${temp}°C / ${co2}ppm",
                                     Toast.LENGTH_SHORT
                                 ).show()
                                 true
@@ -1280,7 +1396,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    Toast.makeText(this, "센서 마커 로드 실패: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "토템 마커 로드 실패: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }
@@ -1289,13 +1405,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun parseRoutePoints(pointsJson: JSONArray): List<LatLng> {
         val points = mutableListOf<LatLng>()
         for (index in 0 until pointsJson.length()) {
-            val point = pointsJson.getJSONObject(index)
-            points.add(
-                LatLng(
-                    point.getDouble("latitude"),
-                    point.getDouble("longitude")
+            val point = pointsJson.get(index)
+            if (point is JSONArray) {
+                points.add(LatLng(point.getDouble(0), point.getDouble(1)))
+            } else {
+                val pointObject = pointsJson.getJSONObject(index)
+                points.add(
+                    LatLng(
+                        pointObject.getDouble("latitude"),
+                        pointObject.getDouble("longitude")
+                    )
                 )
-            )
+            }
         }
         return points
     }
@@ -1357,8 +1478,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun openGet(url: URL): HttpURLConnection {
         return (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 10000
-            readTimeout = 10000
+            setRequestProperty("Connection", "close")
+            connectTimeout = 30000
+            readTimeout = 30000
         }
     }
 
@@ -1366,9 +1488,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         return (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Connection", "close")
             doOutput = true
-            connectTimeout = 10000
-            readTimeout = 10000
+            connectTimeout = 30000
+            readTimeout = 30000
 
             val os: OutputStream = outputStream
             os.write(body.toString().toByteArray())

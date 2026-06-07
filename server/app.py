@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
 from statistics import mean
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, request
 
 from firebase_store import Database, sensor_id_from_name
 from official_sensor_client import fetch_official_sensors
@@ -117,7 +118,7 @@ def route_recommendations():
     payload = request.get_json(force=True)
     current_latitude = float(payload["currentLatitude"])
     current_longitude = float(payload["currentLongitude"])
-    max_distance_meter = int(payload.get("maxDistanceMeter", 2000))
+    max_distance_meter = int(payload.get("maxDistanceMeter", 3500))
     route_option_count = int(payload.get("routeOptionCount", 2))
 
     sensors = db.list_collectible_sensors_with_counts()
@@ -128,14 +129,28 @@ def route_recommendations():
         max_distance_meter=max_distance_meter,
         route_option_count=route_option_count,
     )
-    result = {"routes": routes}
+    result = {"routes": compact_routes_for_app(routes)}
+    recommendation_log = {
+        "routes": [
+            {
+                "routeId": route["routeId"],
+                "routeName": route["routeName"],
+                "routeProfile": route.get("routeProfile"),
+                "estimatedDistanceMeter": route["estimatedDistanceMeter"],
+                "estimatedTimeMinute": route["estimatedTimeMinute"],
+                "sensorIds": [sensor["sensorId"] for sensor in route["sensors"]],
+                "targetSensorId": route["targetSensor"]["sensorId"],
+            }
+            for route in routes
+        ]
+    }
     db.save_route_recommendation(
         user_id=payload.get("userId"),
         current_latitude=current_latitude,
         current_longitude=current_longitude,
         max_distance_meter=max_distance_meter,
         route_option_count=route_option_count,
-        payload=result,
+        payload=recommendation_log,
     )
     return success(result, "추천 경로가 생성되었습니다.")
 
@@ -214,7 +229,7 @@ def legacy_route_generate():
         sensors=db.list_collectible_sensors_with_counts(),
         current_latitude=current_latitude,
         current_longitude=current_longitude,
-        max_distance_meter=int(payload.get("max_distance_meter") or payload.get("maxDistanceMeter") or 2000),
+        max_distance_meter=int(payload.get("max_distance_meter") or payload.get("maxDistanceMeter") or 3500),
         route_option_count=1,
     )
     first_sensor = routes[0]["sensors"][0] if routes and routes[0]["sensors"] else None
@@ -317,11 +332,55 @@ def sensor_response(sensor: dict[str, Any]) -> dict[str, Any]:
 
 
 def success(data: dict[str, Any], message: str):
-    return jsonify({"success": True, "data": data, "message": message})
+    return json_response({"success": True, "data": data, "message": message})
 
 
 def failure(message: str, status_code: int):
-    return jsonify({"success": False, "data": None, "message": message}), status_code
+    return json_response({"success": False, "data": None, "message": message}, status_code)
+
+
+def json_response(payload: dict[str, Any], status_code: int = 200):
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return Response(body, status=status_code, mimetype="application/json")
+
+
+def compact_routes_for_app(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "routeId": route["routeId"],
+            "routeName": route["routeName"],
+            "routeStrategy": route["routeStrategy"],
+            "routeProfile": route.get("routeProfile"),
+            "estimatedDistanceMeter": route["estimatedDistanceMeter"],
+            "estimatedTimeMinute": route["estimatedTimeMinute"],
+            "routePoints": [
+                [
+                    round(float(point["latitude"]), 6),
+                    round(float(point["longitude"]), 6),
+                ]
+                for point in route["routePoints"]
+            ],
+            "sensors": [compact_sensor_for_app(sensor) for sensor in route["sensors"]],
+            "targetSensor": compact_sensor_for_app(route["targetSensor"]),
+            "average": route["average"],
+        }
+        for route in routes
+    ]
+
+
+def compact_sensor_for_app(sensor: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sensorId": sensor["sensorId"],
+        "sensorName": sensor["sensorName"],
+        "latitude": sensor["latitude"],
+        "longitude": sensor["longitude"],
+        "routeLatitude": sensor["routeLatitude"],
+        "routeLongitude": sensor["routeLongitude"],
+        "missionRadiusMeter": sensor["missionRadiusMeter"],
+        "collectedCountToday": sensor["collectedCountToday"],
+        "visitOrder": sensor["visitOrder"],
+        "isTarget": sensor["isTarget"],
+    }
 
 
 if __name__ == "__main__":
