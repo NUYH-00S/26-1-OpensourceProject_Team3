@@ -304,12 +304,12 @@ def walking_distance_meter(
     )
 
 
-def walkway_segment(
+def walkway_node_path(
     start_latitude: float,
     start_longitude: float,
     end_latitude: float,
     end_longitude: float,
-) -> list[dict[str, Any]]:
+) -> list[str]:
     start_node_id = nearest_walkway_node_id(start_latitude, start_longitude)
     end_node_id = nearest_walkway_node_id(end_latitude, end_longitude)
     start_node = walkway_node(start_node_id)
@@ -321,12 +321,77 @@ def walkway_segment(
         start_snap > MAX_WALKWAY_SNAP_DISTANCE_METER
         or end_snap > MAX_WALKWAY_SNAP_DISTANCE_METER
     ):
-        return [
-            {"latitude": start_latitude, "longitude": start_longitude, "kind": "current"},
-            {"latitude": end_latitude, "longitude": end_longitude, "kind": "access"},
-        ]
+        return []
 
-    node_path = shortest_walkway_path(start_node_id, end_node_id)
+    return shortest_walkway_path(start_node_id, end_node_id)
+
+
+def walkway_edge_keys(
+    start_latitude: float,
+    start_longitude: float,
+    end_latitude: float,
+    end_longitude: float,
+) -> tuple[tuple[str, str], ...]:
+    return walkway_edge_keys_for_node_path(
+        walkway_node_path(
+            start_latitude,
+            start_longitude,
+            end_latitude,
+            end_longitude,
+        )
+    )
+
+
+def route_walkway_edge_keys(
+    current_latitude: float,
+    current_longitude: float,
+    route_stops: list[dict[str, Any]],
+) -> tuple[tuple[str, str], ...]:
+    current_access_point = snap_sensor_to_access_point(current_latitude, current_longitude)
+    last_latitude = float(current_access_point["latitude"])
+    last_longitude = float(current_access_point["longitude"])
+    edges: list[tuple[str, str]] = []
+
+    for stop in route_stops:
+        route_latitude = float(stop["routeLatitude"])
+        route_longitude = float(stop["routeLongitude"])
+        edges.extend(
+            walkway_edge_keys(
+                last_latitude,
+                last_longitude,
+                route_latitude,
+                route_longitude,
+            )
+        )
+        last_latitude = route_latitude
+        last_longitude = route_longitude
+
+    return tuple(edges)
+
+
+def walkway_edge_keys_for_node_path(node_path: list[str]) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        normalized_walkway_edge_key(first_id, second_id)
+        for first_id, second_id in zip(node_path, node_path[1:])
+    )
+
+
+def normalized_walkway_edge_key(first_id: str, second_id: str) -> tuple[str, str]:
+    return tuple(sorted((first_id, second_id)))
+
+
+def walkway_segment(
+    start_latitude: float,
+    start_longitude: float,
+    end_latitude: float,
+    end_longitude: float,
+) -> list[dict[str, Any]]:
+    node_path = walkway_node_path(
+        start_latitude,
+        start_longitude,
+        end_latitude,
+        end_longitude,
+    )
     if not node_path:
         return [
             {"latitude": start_latitude, "longitude": start_longitude, "kind": "current"},

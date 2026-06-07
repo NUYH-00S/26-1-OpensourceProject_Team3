@@ -107,6 +107,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var btnRouteOption1: Button
     private lateinit var btnRouteOption2: Button
     private lateinit var btnRouteOption3: Button
+    private lateinit var btnStartRouteGuidance: Button
     private lateinit var btnExchange100: Button
     private lateinit var btnExchange1100: Button
     private lateinit var btnExchange12000: Button
@@ -135,7 +136,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private val routeMarkers = mutableListOf<Marker>()
     private var routePathOverlay: PathOverlay? = null
     private var pendingRouteDisplay: PendingRouteDisplay? = null
+    private var pendingRouteGuidanceStart = false
     private val routeOptions = mutableListOf<PendingRouteDisplay>()
+    private var previewedRouteIndex: Int? = null
+    private var previewedRouteDisplay: PendingRouteDisplay? = null
+    private var activeGuidanceRouteDisplay: PendingRouteDisplay? = null
     private val selectedRouteTotems = mutableListOf<RouteTotem>()
     private val visitedTotemIds = mutableSetOf<String>()
 
@@ -218,6 +223,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         AIR_CLEAN("공기 정화 미션", "AIR_CLEAN"),
     }
 
+    private enum class RouteMarkerMode {
+        PREVIEW_TARGET_ONLY,
+        GUIDANCE_NEXT_AND_TARGET,
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -244,6 +254,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnRouteOption1 = findViewById(R.id.btnRouteOption1)
         btnRouteOption2 = findViewById(R.id.btnRouteOption2)
         btnRouteOption3 = findViewById(R.id.btnRouteOption3)
+        btnStartRouteGuidance = findViewById(R.id.btnStartRouteGuidance)
         btnExchange100 = findViewById(R.id.btnExchange100)
         btnExchange1100 = findViewById(R.id.btnExchange1100)
         btnExchange12000 = findViewById(R.id.btnExchange12000)
@@ -274,7 +285,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             configureUniversityMap()
             pendingRouteDisplay?.let { pending ->
                 pendingRouteDisplay = null
-                showSelectedRoute(pending)
+                if (pendingRouteGuidanceStart) {
+                    pendingRouteGuidanceStart = false
+                    startRouteGuidance(pending)
+                } else {
+                    previewRouteDisplay(pending, showToast = false)
+                }
             }
         }
 
@@ -346,6 +362,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnRouteOption1.setOnClickListener { selectRouteOption(0) }
         btnRouteOption2.setOnClickListener { selectRouteOption(1) }
         btnRouteOption3.setOnClickListener { selectRouteOption(2) }
+        btnStartRouteGuidance.setOnClickListener { startPreviewedRouteGuidance() }
         btnExchange100.setOnClickListener {
             if (requireLogin()) confirmRewardExchange(10000, 100)
         }
@@ -864,7 +881,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         blurOverlay.alpha = 0.4f
         clearRouteOverlays()
         routeOptions.clear()
+        previewedRouteIndex = null
+        previewedRouteDisplay = null
+        activeGuidanceRouteDisplay = null
+        pendingRouteDisplay = null
+        pendingRouteGuidanceStart = false
         routeOptionCard.visibility = View.GONE
+        btnStartRouteGuidance.visibility = View.GONE
+        btnStartRouteGuidance.isEnabled = false
         tvMapHeader.text = "현재 위치 기준 경로 생성 중"
         tvDestinationDistance.text = "목적지까지 계산 중"
         tvNextTotemDistance.text = "다음 토템까지 계산 중"
@@ -940,13 +964,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun showRouteOptions(options: List<PendingRouteDisplay>) {
         routeOptions.clear()
         routeOptions.addAll(options)
+        previewedRouteIndex = null
+        previewedRouteDisplay = null
+        pendingRouteGuidanceStart = false
         clearRouteOverlays()
         clearSensorMarkers()
         routeOptionCard.visibility = View.VISIBLE
+        btnStartRouteGuidance.visibility = View.GONE
+        btnStartRouteGuidance.isEnabled = false
 
         tvMapHeader.text = "추천 경로 선택"
         tvDestinationDistance.text = "목적지까지 --m"
-        tvNextTotemDistance.text = "${routeOptions.size}개 후보 중 하나를 선택하세요"
+        tvNextTotemDistance.text = "${routeOptions.size}개 후보 중 하나를 눌러 미리보세요"
 
         updateRouteOptionButton(btnRouteOption1, 0)
         updateRouteOptionButton(btnRouteOption2, 1)
@@ -960,14 +989,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
 
         val option = routeOptions[index]
+        val isPreviewed = previewedRouteIndex == index
         button.visibility = View.VISIBLE
         button.text =
             "${index + 1}. ${totemRouteName(option.routeName)} · ${option.distanceMeter}m · ${option.timeMinute}분 · ${option.sensors.length()}개 토템"
         button.setBackgroundColor(
-            if (index == 0) "#005088".toColorInt() else "#EDF7F5".toColorInt()
+            if (isPreviewed) "#005088".toColorInt() else "#EDF7F5".toColorInt()
         )
         button.setTextColor(
-            if (index == 0) "#F6F4EA".toColorInt() else "#005088".toColorInt()
+            if (isPreviewed) "#F6F4EA".toColorInt() else "#005088".toColorInt()
         )
     }
 
@@ -977,11 +1007,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
-        routeOptionCard.visibility = View.GONE
-        showSelectedRoute(routeOptions[index])
+        previewedRouteIndex = index
+        previewRouteDisplay(routeOptions[index], showToast = true)
+        updateRouteOptionButton(btnRouteOption1, 0)
+        updateRouteOptionButton(btnRouteOption2, 1)
+        updateRouteOptionButton(btnRouteOption3, 2)
     }
 
-    private fun drawRecommendedRoute(routePoints: List<LatLng>, sensors: JSONArray): Boolean {
+    private fun drawRecommendedRoute(
+        routePoints: List<LatLng>,
+        sensors: JSONArray,
+        markerMode: RouteMarkerMode,
+    ): Boolean {
         val map = naverMap ?: return false
         if (routePoints.size < 2) return false
         clearSensorMarkers()
@@ -995,23 +1032,35 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             this.map = map
         }
         moveCameraTo(routePoints)
+        drawRouteMarkers(sensors, markerMode)
+        return true
+    }
 
-        for (index in 0 until sensors.length()) {
-            val sensor = sensors.getJSONObject(index)
+    private fun drawRouteMarkers(sensors: JSONArray, markerMode: RouteMarkerMode) {
+        val map = naverMap ?: return
+        clearRouteMarkers()
+
+        for (sensor in routeMarkerSensors(sensors, markerMode)) {
             val routeLat = sensor.optDouble("routeLatitude", sensor.getDouble("latitude"))
             val routeLng = sensor.optDouble("routeLongitude", sensor.getDouble("longitude"))
-            val isTargetSensor = sensor.optBoolean("isTarget", false) ||
-                sensor.optString("sensorId") == targetSensorId
+            val sensorId = sensor.optString("sensorId")
+            val isTargetSensor = isRouteTargetSensor(sensor)
+            val isNextSensor = sensorId == currentGuidanceMarkerTotemId()
             val marker = Marker().apply {
                 position = LatLng(routeLat, routeLng)
                 val totemName = totemDisplayName(sensor.getString("sensorName"))
-                captionText = if (isTargetSensor) {
-                    "목표 토템. $totemName"
-                } else {
-                    "${sensor.getInt("visitOrder")}. $totemName"
+                captionText = when {
+                    markerMode == RouteMarkerMode.PREVIEW_TARGET_ONLY -> "목적지토템"
+                    isTargetSensor -> "목적지토템"
+                    isNextSensor -> "다음토템"
+                    else -> totemName
                 }
                 captionTextSize = 12f
-                iconTintColor = if (isTargetSensor) "#11CAA0".toColorInt() else "#005088".toColorInt()
+                iconTintColor = when {
+                    isNextSensor && !isTargetSensor -> "#005088".toColorInt()
+                    isTargetSensor -> "#11CAA0".toColorInt()
+                    else -> "#005088".toColorInt()
+                }
                 setOnClickListener {
                     Toast.makeText(
                         this@MainActivity,
@@ -1024,20 +1073,65 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             marker.map = map
             routeMarkers.add(marker)
         }
-        return true
     }
 
-    private fun showSelectedRoute(routeDisplay: PendingRouteDisplay) {
-        resetMissionState(clearTarget = false)
-        targetSensorName = routeDisplay.targetSensorName
-        targetSensorId = routeDisplay.targetSensorId
-        targetRouteLatitude = routeDisplay.targetRouteLatitude
-        targetRouteLongitude = routeDisplay.targetRouteLongitude
-        selectedRouteTotems.clear()
-        selectedRouteTotems.addAll(parseRouteTotems(routeDisplay.sensors))
+    private fun routeMarkerSensors(
+        sensors: JSONArray,
+        markerMode: RouteMarkerMode,
+    ): List<JSONObject> {
+        val markerSensors = linkedMapOf<String, JSONObject>()
+        val nextTotemId = currentGuidanceMarkerTotemId()
+        var fallbackTarget: JSONObject? = null
 
-        if (!drawRecommendedRoute(routeDisplay.routePoints, routeDisplay.sensors)) {
+        for (index in 0 until sensors.length()) {
+            val sensor = sensors.getJSONObject(index)
+            val sensorId = sensor.optString("sensorId", "TOTEM_$index")
+            fallbackTarget = sensor
+            if (isRouteTargetSensor(sensor)) {
+                markerSensors[sensorId] = sensor
+            }
+            if (
+                markerMode == RouteMarkerMode.GUIDANCE_NEXT_AND_TARGET &&
+                sensorId == nextTotemId
+            ) {
+                markerSensors[sensorId] = sensor
+            }
+        }
+
+        if (markerSensors.isEmpty() && fallbackTarget != null) {
+            val sensorId = fallbackTarget.optString("sensorId", "TARGET")
+            markerSensors[sensorId] = fallbackTarget
+        }
+        return markerSensors.values.toList()
+    }
+
+    private fun isRouteTargetSensor(sensor: JSONObject): Boolean =
+        sensor.optBoolean("isTarget", false) ||
+            sensor.optString("sensorId") == targetSensorId
+
+    private fun currentGuidanceMarkerTotemId(): String? =
+        activeMissionTotem?.id ?: nextUnvisitedTotem()?.id
+
+    private fun refreshGuidanceRouteMarkers() {
+        val routeDisplay = activeGuidanceRouteDisplay ?: return
+        if (naverMap == null) return
+        drawRouteMarkers(routeDisplay.sensors, RouteMarkerMode.GUIDANCE_NEXT_AND_TARGET)
+    }
+
+    private fun previewRouteDisplay(routeDisplay: PendingRouteDisplay, showToast: Boolean) {
+        resetMissionState(clearTarget = false)
+        configureRouteState(routeDisplay)
+        previewedRouteDisplay = routeDisplay
+        activeGuidanceRouteDisplay = null
+
+        if (!drawRecommendedRoute(
+                routeDisplay.routePoints,
+                routeDisplay.sensors,
+                RouteMarkerMode.PREVIEW_TARGET_ONLY,
+            )
+        ) {
             pendingRouteDisplay = routeDisplay
+            pendingRouteGuidanceStart = false
             Log.i(logTag, "route display pending until map is ready")
             tvMapHeader.text = "지도 로딩 중"
             tvDestinationDistance.text = "목적지까지 계산 중"
@@ -1045,14 +1139,72 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
+        routeOptionCard.visibility = View.VISIBLE
+        btnStartRouteGuidance.visibility = View.VISIBLE
+        btnStartRouteGuidance.isEnabled = true
+        tvMapHeader.text = "경로 미리보기"
+        tvDestinationDistance.text = "${totemRouteName(routeDisplay.routeName)} · ${routeDisplay.distanceMeter}m · ${routeDisplay.timeMinute}분"
+        tvNextTotemDistance.text = "${routeDisplay.sensors.length()}개 토템 경유 · 안내 시작을 누르세요"
+        if (showToast) {
+            Toast.makeText(
+                this@MainActivity,
+                "경로를 미리보기로 표시했습니다.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        Log.i(
+            logTag,
+            "route preview displayed points=${routeDisplay.routePoints.size}, sensors=${routeDisplay.sensors.length()}"
+        )
+    }
+
+    private fun startPreviewedRouteGuidance() {
+        val routeDisplay = previewedRouteDisplay
+        if (routeDisplay == null) {
+            Toast.makeText(this, "먼저 추천 경로를 선택하세요.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        startRouteGuidance(routeDisplay)
+    }
+
+    private fun startRouteGuidance(routeDisplay: PendingRouteDisplay) {
+        resetMissionState(clearTarget = false)
+        configureRouteState(routeDisplay)
+        activeGuidanceRouteDisplay = routeDisplay
+        if (!drawRecommendedRoute(
+                routeDisplay.routePoints,
+                routeDisplay.sensors,
+                RouteMarkerMode.GUIDANCE_NEXT_AND_TARGET,
+            )
+        ) {
+            pendingRouteDisplay = routeDisplay
+            pendingRouteGuidanceStart = true
+            Log.i(logTag, "route guidance pending until map is ready")
+            tvMapHeader.text = "지도 로딩 중"
+            tvDestinationDistance.text = "목적지까지 계산 중"
+            tvNextTotemDistance.text = "다음 토템까지 계산 중"
+            return
+        }
+
+        routeOptionCard.visibility = View.GONE
         tvMapHeader.text = totemRouteName(routeDisplay.routeName)
         startMissionProximityMonitoring()
         Toast.makeText(
             this@MainActivity,
-            "추천 경로 표시 완료: ${routeDisplay.sensors.length()}개 토템",
+            "경로 안내 시작: ${routeDisplay.sensors.length()}개 토템",
             Toast.LENGTH_SHORT
         ).show()
-        Log.i(logTag, "route displayed points=${routeDisplay.routePoints.size}, sensors=${routeDisplay.sensors.length()}")
+        Log.i(logTag, "route guidance started points=${routeDisplay.routePoints.size}, sensors=${routeDisplay.sensors.length()}")
+    }
+
+    private fun configureRouteState(routeDisplay: PendingRouteDisplay) {
+        targetSensorName = routeDisplay.targetSensorName
+        targetSensorId = routeDisplay.targetSensorId
+        targetRouteLatitude = routeDisplay.targetRouteLatitude
+        targetRouteLongitude = routeDisplay.targetRouteLongitude
+        selectedRouteTotems.clear()
+        selectedRouteTotems.addAll(parseRouteTotems(routeDisplay.sensors))
     }
 
     private fun startMissionProximityMonitoring() {
@@ -1063,6 +1215,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         activeMissionTotem = null
         missionRemainingSeconds = missionDurationSeconds
         hideMissionGamePanel()
+        refreshGuidanceRouteMarkers()
         updateRouteDistanceStatus(currentDistanceToTarget())
         evaluateMissionProximity()
     }
@@ -1112,6 +1265,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         activeMissionTotem = totem
         activeMissionGameType = missionGameTypeForTotem(totem)
         Log.i(logTag, "mission started totem=${totem.id}, type=${activeMissionGameType.missionType}")
+        refreshGuidanceRouteMarkers()
         showMissionGamePanel(totem)
         updateRouteDistanceStatus(currentDistanceToTarget())
         Toast.makeText(
@@ -1404,6 +1558,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         hideMissionGamePanel()
         missionCompleted = nextUnvisitedTotem() == null
         isWalkingActive = !missionCompleted
+        refreshGuidanceRouteMarkers()
         updateRouteDistanceStatus(currentDistanceToTarget())
         sendCollectedSensorDataToServer(completedTotem, completedGameType, completedScore, completedStartedAt)
     }
@@ -1426,6 +1581,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         hideMissionGamePanel()
         missionCompleted = nextUnvisitedTotem() == null
         isWalkingActive = !missionCompleted
+        refreshGuidanceRouteMarkers()
         updateRouteDistanceStatus(currentDistanceToTarget())
         Toast.makeText(this, "토템 반경을 벗어나 미션이 종료되었습니다.", Toast.LENGTH_SHORT).show()
     }
@@ -1454,6 +1610,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             targetRouteLatitude = null
             targetRouteLongitude = null
             selectedRouteTotems.clear()
+            previewedRouteIndex = null
+            previewedRouteDisplay = null
+            activeGuidanceRouteDisplay = null
+            pendingRouteDisplay = null
+            pendingRouteGuidanceStart = false
         }
     }
 
@@ -1461,7 +1622,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         runOnUiThread {
             Log.w(logTag, message)
             routeOptions.clear()
+            previewedRouteIndex = null
+            previewedRouteDisplay = null
+            pendingRouteDisplay = null
+            pendingRouteGuidanceStart = false
             routeOptionCard.visibility = View.GONE
+            btnStartRouteGuidance.visibility = View.GONE
+            btnStartRouteGuidance.isEnabled = false
             resetMissionState(clearTarget = true)
             tvDestinationDistance.text = "목적지까지 --m"
             tvNextTotemDistance.text = "다음 토템까지 --m"
@@ -1472,6 +1639,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun clearRouteOverlays() {
         routePathOverlay?.map = null
         routePathOverlay = null
+        clearRouteMarkers()
+    }
+
+    private fun clearRouteMarkers() {
         routeMarkers.forEach { it.map = null }
         routeMarkers.clear()
     }

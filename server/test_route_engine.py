@@ -1,7 +1,11 @@
 import unittest
 
 from route_engine import recommend_routes
-from route_geometry import WALKWAY_NODES
+from route_geometry import WALKWAY_NODES, route_walkway_edge_keys
+
+
+CURRENT_LATITUDE = 36.628123
+CURRENT_LONGITUDE = 127.457891
 
 
 def sensor(
@@ -66,11 +70,24 @@ class RouteEngineTest(unittest.TestCase):
             )
         return sensors
 
+    def route_edges(self, route: dict) -> tuple[tuple[str, str], ...]:
+        return route_walkway_edge_keys(
+            current_latitude=CURRENT_LATITUDE,
+            current_longitude=CURRENT_LONGITUDE,
+            route_stops=[
+                {
+                    "routeLatitude": sensor_payload["routeLatitude"],
+                    "routeLongitude": sensor_payload["routeLongitude"],
+                }
+                for sensor_payload in route["sensors"]
+            ],
+        )
+
     def test_routes_cover_three_distance_bands_with_limited_overlap(self):
         routes = recommend_routes(
             sensors=self.campus_graph_sensors(),
-            current_latitude=36.628123,
-            current_longitude=127.457891,
+            current_latitude=CURRENT_LATITUDE,
+            current_longitude=CURRENT_LONGITUDE,
             max_distance_meter=3500,
             route_option_count=3,
         )
@@ -84,6 +101,12 @@ class RouteEngineTest(unittest.TestCase):
             self.assertLessEqual(route["estimatedDistanceMeter"], maximum)
             self.assertEqual(route["targetSensor"]["sensorId"], route["sensors"][-1]["sensorId"])
             self.assertTrue(route["sensors"][-1]["isTarget"])
+            edge_keys = self.route_edges(route)
+            self.assertEqual(
+                len(edge_keys),
+                len(set(edge_keys)),
+                f"{route['routeName']} repeats a walkway edge",
+            )
 
         sensor_sets = [
             {sensor_payload["sensorId"] for sensor_payload in route["sensors"]}
@@ -96,8 +119,8 @@ class RouteEngineTest(unittest.TestCase):
     def test_sensor_count_is_not_capped_at_three_when_distance_budget_allows_more(self):
         routes = recommend_routes(
             sensors=self.campus_graph_sensors(),
-            current_latitude=36.628123,
-            current_longitude=127.457891,
+            current_latitude=CURRENT_LATITUDE,
+            current_longitude=CURRENT_LONGITUDE,
             max_distance_meter=3500,
             route_option_count=1,
         )
@@ -106,6 +129,8 @@ class RouteEngineTest(unittest.TestCase):
         self.assertGreater(len(routes[0]["sensors"]), 3)
         self.assertGreaterEqual(routes[0]["estimatedDistanceMeter"], 500)
         self.assertLessEqual(routes[0]["estimatedDistanceMeter"], 1000)
+        edge_keys = self.route_edges(routes[0])
+        self.assertEqual(len(edge_keys), len(set(edge_keys)))
 
 
 if __name__ == "__main__":

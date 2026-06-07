@@ -8,6 +8,7 @@ from route_geometry import (
     build_route_points,
     route_distance_meter,
     snap_sensor_to_access_point,
+    walkway_edge_keys,
     walking_distance_meter,
 )
 
@@ -16,6 +17,8 @@ WALKING_SPEED_METER_PER_MINUTE = 72.0
 ROUTE_DISTANCE_BUDGET_MULTIPLIER = 1.5
 DEFAULT_MAX_ROUTE_DISTANCE_METER = 3500
 ROUTE_SEARCH_BEAM_WIDTH = 420
+PROFILE_STATE_LIMIT = 380
+ROUTE_COMBINATION_BEAM_WIDTH = 380
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,7 @@ class RouteCandidate:
 class RouteSearchState:
     sensor_indices: tuple[int, ...]
     length_meter: int
+    edge_keys: tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -48,6 +52,32 @@ class RouteDistanceProfile:
     name: str
     min_meter: int
     max_meter: int
+
+
+@dataclass(frozen=True)
+class RouteStateInfo:
+    state: RouteSearchState
+    sensor_mask: int
+    access_mask: int
+    edge_mask: int
+    shortage_score: int
+    sensor_count: int
+
+
+@dataclass(frozen=True)
+class RouteSelection:
+    states: tuple[RouteSearchState, ...]
+    sensor_mask: int
+    access_mask: int
+    edge_mask: int
+    out_of_band_count: int
+    max_sensor_overlap_count: int
+    sensor_overlap_count: int
+    access_overlap_count: int
+    edge_overlap_count: int
+    distance_penalty: int
+    shortage_score: int
+    sensor_count: int
 
 
 def recommend_routes(
@@ -109,26 +139,13 @@ def recommend_routes(
         return []
 
     routes = []
-    used_sensor_ids: set[str] = set()
-    used_access_points: set[tuple[float, float]] = set()
-    used_path_points: set[tuple[float, float]] = set()
-    used_paths: set[tuple[int, ...]] = set()
+    selected_states = select_route_states_for_profiles(
+        states=route_states,
+        candidates=candidates,
+        profiles=profiles,
+    )
 
-    for profile in profiles:
-        state = select_route_state_for_profile(
-            states=route_states,
-            candidates=candidates,
-            profile=profile,
-            used_sensor_ids=used_sensor_ids,
-            used_access_points=used_access_points,
-            used_path_points=used_path_points,
-            used_paths=used_paths,
-            current_latitude=current_latitude,
-            current_longitude=current_longitude,
-        )
-        if state is None:
-            continue
-
+    for profile, state in zip(profiles, selected_states):
         route_sensors = [candidates[index] for index in state.sensor_indices]
         target_sensor = route_sensors[-1]
         direct_distance = walking_distance_meter(
@@ -146,19 +163,9 @@ def recommend_routes(
                 target_sensor=target_sensor,
                 direct_distance_meter=direct_distance,
                 distance_budget_meter=profile.max_meter,
-                route_strategy="distance_band_shortage_overlap",
+                route_strategy="distance_band_shortage_no_repeated_edges",
                 route_name=profile.name,
                 route_profile=profile,
-            )
-        )
-        used_paths.add(state.sensor_indices)
-        used_sensor_ids.update(sensor.sensor_id for sensor in route_sensors)
-        used_access_points.update(access_point_key(sensor) for sensor in route_sensors)
-        used_path_points.update(
-            route_point_keys(
-                current_latitude=current_latitude,
-                current_longitude=current_longitude,
-                route_sensors=route_sensors,
             )
         )
 
@@ -196,11 +203,12 @@ def route_states_for_distance_profiles(
     candidates: list[RouteCandidate],
     max_distance_meter: int,
 ) -> list[RouteSearchState]:
-    empty_state = RouteSearchState(sensor_indices=(), length_meter=0)
+    empty_state = RouteSearchState(sensor_indices=(), length_meter=0, edge_keys=())
     if not candidates:
         return []
 
     distance_cache: dict[tuple[str, str], int] = {}
+    edge_cache: dict[tuple[str, str], tuple[tuple[str, str], ...]] = {}
 
     def node_coordinate(index: int | str) -> tuple[float, float]:
         if index == "start":
@@ -227,6 +235,22 @@ def route_states_for_distance_profiles(
         distance_cache[cache_key] = distance
         return distance
 
+    def path_edges(first: int | str, second: int | str) -> tuple[tuple[str, str], ...]:
+        cache_key = (str(first), str(second))
+        if cache_key in edge_cache:
+            return edge_cache[cache_key]
+
+        first_latitude, first_longitude = node_coordinate(first)
+        second_latitude, second_longitude = node_coordinate(second)
+        edges = walkway_edge_keys(
+            first_latitude,
+            first_longitude,
+            second_latitude,
+            second_longitude,
+        )
+        edge_cache[cache_key] = edges
+        return edges
+
     def state_value(state: RouteSearchState) -> int:
         return route_shortage_score(state, candidates)
 
@@ -251,6 +275,10 @@ def route_states_for_distance_profiles(
                 if candidate_index in used_indices:
                     continue
 
+                next_edges = path_edges(last_node, candidate_index)
+                if set(state.edge_keys) & set(next_edges):
+                    continue
+
                 next_length = state.length_meter + path_distance(last_node, candidate_index)
                 if next_length > max_distance_meter:
                     continue
@@ -263,6 +291,7 @@ def route_states_for_distance_profiles(
                 next_state = RouteSearchState(
                     sensor_indices=next_path,
                     length_meter=next_length,
+                    edge_keys=state.edge_keys + next_edges,
                 )
                 best_by_path[next_path] = next_state
                 expanded_states.append(next_state)
@@ -278,49 +307,160 @@ def route_states_for_distance_profiles(
     return sorted(best_by_path.values(), key=beam_sort_key)
 
 
-def select_route_state_for_profile(
+def select_route_states_for_profiles(
     states: list[RouteSearchState],
     candidates: list[RouteCandidate],
-    profile: RouteDistanceProfile,
-    used_sensor_ids: set[str],
-    used_access_points: set[tuple[float, float]],
-    used_path_points: set[tuple[float, float]],
-    used_paths: set[tuple[int, ...]],
-    current_latitude: float,
-    current_longitude: float,
-) -> RouteSearchState | None:
-    selectable_states = [
-        state
-        for state in states
-        if state.sensor_indices and state.sensor_indices not in used_paths
+    profiles: list[RouteDistanceProfile],
+) -> list[RouteSearchState]:
+    state_infos = route_state_infos(states, candidates)
+    selections = [
+        RouteSelection(
+            states=(),
+            sensor_mask=0,
+            access_mask=0,
+            edge_mask=0,
+            out_of_band_count=0,
+            max_sensor_overlap_count=0,
+            sensor_overlap_count=0,
+            access_overlap_count=0,
+            edge_overlap_count=0,
+            distance_penalty=0,
+            shortage_score=0,
+            sensor_count=0,
+        )
     ]
-    if not selectable_states:
-        return None
 
-    def distance_penalty(length_meter: int) -> int:
-        if profile.min_meter <= length_meter <= profile.max_meter:
-            midpoint = (profile.min_meter + profile.max_meter) // 2
-            return abs(length_meter - midpoint)
-        if length_meter < profile.min_meter:
-            return profile.min_meter - length_meter
-        return length_meter - profile.max_meter
+    for profile in profiles:
+        profile_states = profile_route_state_candidates(
+            state_infos=state_infos,
+            profile=profile,
+        )
+        if not profile_states:
+            break
 
-    def state_sort_key(state: RouteSearchState) -> tuple[int, int, int, int, int, int, tuple[int, ...]]:
-        route_sensors = [candidates[index] for index in state.sensor_indices]
-        sensor_ids = {sensor.sensor_id for sensor in route_sensors}
-        access_points = {access_point_key(sensor) for sensor in route_sensors}
-        in_band = profile.min_meter <= state.length_meter <= profile.max_meter
-        return (
-            0 if in_band else 1,
-            len(sensor_ids & used_sensor_ids),
-            len(access_points & used_access_points),
-            -route_shortage_score(state, candidates),
-            -len(state.sensor_indices),
-            distance_penalty(state.length_meter),
-            state.sensor_indices,
+        expanded: list[RouteSelection] = []
+        for selection in selections:
+            selected_paths = {state.sensor_indices for state in selection.states}
+            for state_info in profile_states:
+                state = state_info.state
+                if state.sensor_indices in selected_paths:
+                    continue
+
+                sensor_overlap = (state_info.sensor_mask & selection.sensor_mask).bit_count()
+                access_overlap = (state_info.access_mask & selection.access_mask).bit_count()
+                edge_overlap = (state_info.edge_mask & selection.edge_mask).bit_count()
+                in_band = profile.min_meter <= state.length_meter <= profile.max_meter
+
+                expanded.append(
+                    RouteSelection(
+                        states=selection.states + (state,),
+                        sensor_mask=selection.sensor_mask | state_info.sensor_mask,
+                        access_mask=selection.access_mask | state_info.access_mask,
+                        edge_mask=selection.edge_mask | state_info.edge_mask,
+                        out_of_band_count=selection.out_of_band_count + (0 if in_band else 1),
+                        max_sensor_overlap_count=max(
+                            selection.max_sensor_overlap_count,
+                            sensor_overlap,
+                        ),
+                        sensor_overlap_count=selection.sensor_overlap_count + sensor_overlap,
+                        access_overlap_count=selection.access_overlap_count + access_overlap,
+                        edge_overlap_count=selection.edge_overlap_count + edge_overlap,
+                        distance_penalty=selection.distance_penalty + profile_distance_penalty(
+                            profile,
+                            state.length_meter,
+                        ),
+                        shortage_score=selection.shortage_score + state_info.shortage_score,
+                        sensor_count=selection.sensor_count + state_info.sensor_count,
+                    )
+                )
+
+        if not expanded:
+            break
+
+        selections = sorted(expanded, key=route_selection_sort_key)[:ROUTE_COMBINATION_BEAM_WIDTH]
+
+    if not selections:
+        return []
+    return list(min(selections, key=route_selection_sort_key).states)
+
+
+def profile_route_state_candidates(
+    state_infos: list[RouteStateInfo],
+    profile: RouteDistanceProfile,
+) -> list[RouteStateInfo]:
+    return sorted(
+        state_infos,
+        key=lambda state_info: (
+            0 if profile.min_meter <= state_info.state.length_meter <= profile.max_meter else 1,
+            -state_info.shortage_score,
+            -state_info.sensor_count,
+            profile_distance_penalty(profile, state_info.state.length_meter),
+            state_info.state.length_meter,
+            state_info.state.sensor_indices,
+        ),
+    )[:PROFILE_STATE_LIMIT]
+
+
+def route_selection_sort_key(selection: RouteSelection) -> tuple[int, int, int, int, int, int, int, int, tuple[tuple[int, ...], ...]]:
+    return (
+        selection.out_of_band_count,
+        selection.max_sensor_overlap_count,
+        selection.sensor_overlap_count,
+        selection.access_overlap_count,
+        selection.edge_overlap_count,
+        -selection.shortage_score,
+        -selection.sensor_count,
+        selection.distance_penalty,
+        tuple(state.sensor_indices for state in selection.states),
+    )
+
+
+def profile_distance_penalty(profile: RouteDistanceProfile, length_meter: int) -> int:
+    if profile.min_meter <= length_meter <= profile.max_meter:
+        midpoint = (profile.min_meter + profile.max_meter) // 2
+        return abs(length_meter - midpoint)
+    if length_meter < profile.min_meter:
+        return profile.min_meter - length_meter
+    return length_meter - profile.max_meter
+
+
+def route_state_infos(
+    states: list[RouteSearchState],
+    candidates: list[RouteCandidate],
+) -> list[RouteStateInfo]:
+    access_bits: dict[tuple[float, float], int] = {}
+    edge_bits: dict[tuple[str, str], int] = {}
+    infos: list[RouteStateInfo] = []
+
+    for index, candidate in enumerate(candidates):
+        access_bits.setdefault(access_point_key(candidate), index)
+
+    for state in states:
+        if not state.sensor_indices:
+            continue
+
+        sensor_mask = 0
+        access_mask = 0
+        edge_mask = 0
+        for candidate_index in state.sensor_indices:
+            sensor_mask |= 1 << candidate_index
+            access_mask |= 1 << access_bits[access_point_key(candidates[candidate_index])]
+        for edge_key in state.edge_keys:
+            edge_index = edge_bits.setdefault(edge_key, len(edge_bits))
+            edge_mask |= 1 << edge_index
+
+        infos.append(
+            RouteStateInfo(
+                state=state,
+                sensor_mask=sensor_mask,
+                access_mask=access_mask,
+                edge_mask=edge_mask,
+                shortage_score=route_shortage_score(state, candidates),
+                sensor_count=len(state.sensor_indices),
+            )
         )
 
-    return min(selectable_states, key=state_sort_key)
+    return infos
 
 
 def route_shortage_score(state: RouteSearchState, candidates: list[RouteCandidate]) -> int:
@@ -334,28 +474,6 @@ def route_shortage_score(state: RouteSearchState, candidates: list[RouteCandidat
         score += 8 if not sensor.fresh else 0
         score += 15
     return score
-
-
-def route_point_keys(
-    current_latitude: float,
-    current_longitude: float,
-    route_sensors: list[RouteCandidate],
-) -> set[tuple[float, float]]:
-    route_points = build_route_points(
-        current_latitude=current_latitude,
-        current_longitude=current_longitude,
-        route_stops=[
-            {
-                "routeLatitude": sensor.route_latitude,
-                "routeLongitude": sensor.route_longitude,
-            }
-            for sensor in route_sensors
-        ],
-    )
-    return {
-        (round(point["latitude"], 5), round(point["longitude"], 5))
-        for point in route_points
-    }
 
 
 def access_point_key(sensor: RouteCandidate) -> tuple[float, float]:
