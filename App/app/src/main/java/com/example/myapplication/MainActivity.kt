@@ -7,8 +7,10 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
+import android.content.res.ColorStateList
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -36,6 +38,7 @@ import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
+import com.google.android.material.button.MaterialButton
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraPosition
@@ -964,7 +967,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun showRouteOptions(options: List<PendingRouteDisplay>) {
         routeOptions.clear()
         routeOptions.addAll(options)
-        previewedRouteIndex = null
+        previewedRouteIndex = 0
         previewedRouteDisplay = null
         pendingRouteGuidanceStart = false
         clearRouteOverlays()
@@ -975,11 +978,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         tvMapHeader.text = "추천 경로 선택"
         tvDestinationDistance.text = "목적지까지 --m"
-        tvNextTotemDistance.text = "${routeOptions.size}개 후보 중 하나를 눌러 미리보세요"
+        tvNextTotemDistance.text = "1번 경로를 미리보고 있습니다"
 
         updateRouteOptionButton(btnRouteOption1, 0)
         updateRouteOptionButton(btnRouteOption2, 1)
         updateRouteOptionButton(btnRouteOption3, 2)
+        routeOptions.firstOrNull()?.let {
+            previewRouteDisplay(it, showToast = false)
+            updateRouteOptionButton(btnRouteOption1, 0)
+            updateRouteOptionButton(btnRouteOption2, 1)
+            updateRouteOptionButton(btnRouteOption3, 2)
+        }
     }
 
     private fun updateRouteOptionButton(button: Button, index: Int) {
@@ -991,14 +1000,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val option = routeOptions[index]
         val isPreviewed = previewedRouteIndex == index
         button.visibility = View.VISIBLE
-        button.text =
-            "${index + 1}. ${totemRouteName(option.routeName)} · ${option.distanceMeter}m · ${option.timeMinute}분 · ${option.sensors.length()}개 토템"
-        button.setBackgroundColor(
-            if (isPreviewed) "#005088".toColorInt() else "#EDF7F5".toColorInt()
+        button.text = "${index + 1}. ${routeOptionSummary(option)}"
+        button.backgroundTintList = ColorStateList.valueOf(
+            if (isPreviewed) "#0B5D73".toColorInt() else "#EAF7F4".toColorInt()
         )
         button.setTextColor(
-            if (isPreviewed) "#F6F4EA".toColorInt() else "#005088".toColorInt()
+            if (isPreviewed) Color.WHITE else "#0B5D73".toColorInt()
         )
+        if (button is MaterialButton) {
+            button.strokeColor = ColorStateList.valueOf(
+                if (isPreviewed) "#0B5D73".toColorInt() else "#CDE8E2".toColorInt()
+            )
+            button.strokeWidth = dp(1)
+        }
     }
 
     private fun selectRouteOption(index: Int) {
@@ -1026,7 +1040,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
         routePathOverlay = PathOverlay().apply {
             coords = routePoints
-            color = "#005088".toColorInt()
+            color = "#0B5D73".toColorInt()
             outlineColor = Color.WHITE
             width = 14
             this.map = map
@@ -1057,9 +1071,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 }
                 captionTextSize = 12f
                 iconTintColor = when {
-                    isNextSensor && !isTargetSensor -> "#005088".toColorInt()
-                    isTargetSensor -> "#11CAA0".toColorInt()
-                    else -> "#005088".toColorInt()
+                    isNextSensor && !isTargetSensor -> "#0B5D73".toColorInt()
+                    isTargetSensor -> "#17C6A3".toColorInt()
+                    else -> "#0B5D73".toColorInt()
                 }
                 setOnClickListener {
                     Toast.makeText(
@@ -1143,8 +1157,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnStartRouteGuidance.visibility = View.VISIBLE
         btnStartRouteGuidance.isEnabled = true
         tvMapHeader.text = "경로 미리보기"
-        tvDestinationDistance.text = "${totemRouteName(routeDisplay.routeName)} · ${routeDisplay.distanceMeter}m · ${routeDisplay.timeMinute}분"
-        tvNextTotemDistance.text = "${routeDisplay.sensors.length()}개 토템 경유 · 안내 시작을 누르세요"
+        tvDestinationDistance.text = routeOptionSummary(routeDisplay)
+        tvNextTotemDistance.text = "안내 시작을 누르세요"
         if (showToast) {
             Toast.makeText(
                 this@MainActivity,
@@ -1188,7 +1202,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
 
         routeOptionCard.visibility = View.GONE
-        tvMapHeader.text = totemRouteName(routeDisplay.routeName)
+        tvMapHeader.text = routeDestinationTitle(routeDisplay)
         startMissionProximityMonitoring()
         Toast.makeText(
             this@MainActivity,
@@ -1344,6 +1358,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             .replace("sensor", "토템", ignoreCase = true)
             .replace("SENSOR", "토템", ignoreCase = true)
 
+    private fun routeDestinationTitle(routeDisplay: PendingRouteDisplay): String {
+        val totemName = totemDisplayName(routeDisplay.targetSensorName).trim()
+        val destinationTotemName = if (totemName.startsWith("토템")) {
+            totemName
+        } else {
+            "토템 $totemName"
+        }
+        return "목적지 : $destinationTotemName"
+    }
+
+    private fun routeOptionSummary(routeDisplay: PendingRouteDisplay): String =
+        "${routeDestinationTitle(routeDisplay)} · ${routeDisplay.distanceMeter}m · ${routeDisplay.timeMinute}분"
+
     private fun totemRouteName(routeName: String): String =
         routeName.replace("센서", "토템")
 
@@ -1405,23 +1432,32 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private fun renderTapCircleRound() {
-        tvMissionGamePrompt.text = "1초마다 나타나는 원을 터치하세요."
+        setMissionPrompt("초록 원이 나타나면 바로 터치하세요.", "#12343B", 17f, true)
         missionGameBoard.removeAllViews()
         missionGameBoard.post {
             if (!missionInProgress || activeMissionGameType != MissionGameType.TAP_CIRCLE) return@post
             missionGameBoard.removeAllViews()
-            val size = dp(78)
+            val size = dp(106)
             val maxX = maxOf(0, missionGameBoard.width - size)
             val maxY = maxOf(0, missionGameBoard.height - size)
             val circle = TextView(this).apply {
-                text = "+1"
-                textSize = 18f
+                text = "터치!\n+1"
+                textSize = 21f
+                setTypeface(null, Typeface.BOLD)
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                background = ovalDrawable("#11CAA0")
+                background = ovalDrawable("#17C6A3")
                 setOnClickListener {
                     addMissionGameScore(1)
-                    renderTapCircleRound()
+                    isEnabled = false
+                    text = "성공!\n+1점"
+                    background = ovalDrawable("#0B8F6A")
+                    setMissionPrompt("좋아요! +1점", "#0B8F6A", 20f, true)
+                    missionGameBoard.postDelayed({
+                        if (missionInProgress && activeMissionGameType == MissionGameType.TAP_CIRCLE) {
+                            renderTapCircleRound()
+                        }
+                    }, 650L)
                 }
             }
             missionGameBoard.addView(
@@ -1438,45 +1474,178 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         missionGameBoard.removeAllViews()
         colorMatchTargetIndex = Random.nextInt(missionColors.size)
         val target = missionColors[colorMatchTargetIndex]
-        tvMissionGamePrompt.text = "제시된 색과 같은 버튼을 누르세요: ${target.label}"
-        missionGameBoard.addView(missionButtonGrid(missionColors.size) { index ->
+        setMissionPrompt("아래 버튼 중 같은 색을 누르세요.", "#12343B", 17f, true)
+        missionGameBoard.addView(colorMatchBoard(target))
+    }
+
+    private fun colorMatchBoard(target: MissionColor): LinearLayout {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+        }
+        val targetTextColor =
+            if (target.label == "노랑") "#12343B".toColorInt() else Color.WHITE
+        val targetCard = TextView(this).apply {
+            text = "이번 색\n${target.label}"
+            textSize = 26f
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(targetTextColor)
+            background = roundedDrawable(target.hex, dp(8), Color.WHITE, dp(2))
+        }
+        column.addView(
+            targetCard,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(92),
+            ).apply {
+                setMargins(dp(4), dp(4), dp(4), dp(8))
+            }
+        )
+        column.addView(
+            missionButtonGrid(missionColors.size) { index ->
             val color = missionColors[index]
             Button(this).apply {
                 text = color.label
-                textSize = 14f
-                setTextColor(if (color.label == "노랑") "#0E2E3A".toColorInt() else Color.WHITE)
+                textSize = 20f
+                setTypeface(null, Typeface.BOLD)
+                setAllCaps(false)
+                setTextColor(if (color.label == "노랑") "#12343B".toColorInt() else Color.WHITE)
                 setBackgroundColor(color.hex.toColorInt())
                 setOnClickListener {
                     if (index == colorMatchTargetIndex) {
                         addMissionGameScore(1)
+                        showColorMatchFeedback(isCorrect = true, target = target)
                     } else {
                         updateMissionGameHeader()
+                        showColorMatchFeedback(isCorrect = false, target = target)
                     }
-                    renderColorMatchRound()
+                }
+            }
+            },
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f,
+            )
+        )
+        return column
+    }
+
+    private fun showColorMatchFeedback(isCorrect: Boolean, target: MissionColor) {
+        if (!missionInProgress || activeMissionGameType != MissionGameType.COLOR_MATCH) return
+
+        val prompt = if (isCorrect) {
+            "정답! +1점"
+        } else {
+            "오답! 정답은 ${target.label}"
+        }
+        val promptColor = if (isCorrect) "#0B8F6A" else "#C23B3B"
+        setMissionPrompt(prompt, promptColor, 20f, true)
+
+        missionGameBoard.removeAllViews()
+        val feedbackView = TextView(this).apply {
+            text = if (isCorrect) {
+                "정답!\n+1점"
+            } else {
+                "오답\n정답은 ${target.label}"
+            }
+            textSize = 30f
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(if (isCorrect) "#0B8F6A".toColorInt() else "#C23B3B".toColorInt())
+            background = roundedDrawable(
+                if (isCorrect) "#E8F8F2" else "#FFF0F0",
+                dp(8),
+                if (isCorrect) "#BFE9DD".toColorInt() else "#F0C4C4".toColorInt(),
+                dp(2),
+            )
+        }
+        missionGameBoard.addView(
+            feedbackView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ).apply {
+                setMargins(dp(12), dp(12), dp(12), dp(12))
+            }
+        )
+        missionGameBoard.postDelayed({
+            if (missionInProgress && activeMissionGameType == MissionGameType.COLOR_MATCH) {
+                renderColorMatchRound()
+            }
+        }, 650L)
+    }
+
+    private fun renderAirCleanRound() {
+        missionGameBoard.removeAllViews()
+        setMissionPrompt("빨간 CO2만 터치하세요.", "#12343B", 17f, true)
+        val dirtyParticles = (0 until 6).shuffled().take(2).toSet()
+        missionGameBoard.addView(missionButtonGrid(6) { index ->
+            val isDirty = index in dirtyParticles
+            Button(this).apply {
+                text = if (isDirty) "CO2\n터치!" else "맑음\n누르지 마세요"
+                textSize = if (isDirty) 20f else 15f
+                setTypeface(null, Typeface.BOLD)
+                setAllCaps(false)
+                gravity = Gravity.CENTER
+                setTextColor(if (isDirty) Color.WHITE else "#244B5A".toColorInt())
+                setBackgroundColor(if (isDirty) "#D94B4B".toColorInt() else "#DDEDEA".toColorInt())
+                setOnClickListener {
+                    if (isDirty) {
+                        addMissionGameScore(1)
+                        showAirCleanFeedback(isCorrect = true)
+                    } else {
+                        showAirCleanFeedback(isCorrect = false)
+                    }
                 }
             }
         })
     }
 
-    private fun renderAirCleanRound() {
+    private fun showAirCleanFeedback(isCorrect: Boolean) {
+        if (!missionInProgress || activeMissionGameType != MissionGameType.AIR_CLEAN) return
+
+        val prompt = if (isCorrect) "정화 성공! +1점" else "맑음은 누르지 마세요"
+        val promptColor = if (isCorrect) "#0B8F6A" else "#C23B3B"
+        setMissionPrompt(prompt, promptColor, 20f, true)
+
         missionGameBoard.removeAllViews()
-        tvMissionGamePrompt.text = "빨간 CO2 입자를 터치해 공기를 정화하세요."
-        val dirtyParticles = (0 until 6).shuffled().take(2).toSet()
-        missionGameBoard.addView(missionButtonGrid(6) { index ->
-            val isDirty = index in dirtyParticles
-            Button(this).apply {
-                text = if (isDirty) "CO2" else "맑음"
-                textSize = 13f
-                setTextColor(if (isDirty) Color.WHITE else "#0E2E3A".toColorInt())
-                setBackgroundColor(if (isDirty) "#D94B4B".toColorInt() else "#CDEFE7".toColorInt())
-                setOnClickListener {
-                    if (isDirty) {
-                        addMissionGameScore(1)
-                        renderAirCleanRound()
-                    }
-                }
+        val feedbackView = TextView(this).apply {
+            text = if (isCorrect) {
+                "정화 성공!\n+1점"
+            } else {
+                "오답\n빨간 CO2만 터치"
             }
-        })
+            textSize = 28f
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(if (isCorrect) "#0B8F6A".toColorInt() else "#C23B3B".toColorInt())
+            background = roundedDrawable(
+                if (isCorrect) "#E8F8F2" else "#FFF0F0",
+                dp(8),
+                if (isCorrect) "#BFE9DD".toColorInt() else "#F0C4C4".toColorInt(),
+                dp(2),
+            )
+        }
+        missionGameBoard.addView(
+            feedbackView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ).apply {
+                setMargins(dp(12), dp(12), dp(12), dp(12))
+            }
+        )
+        missionGameBoard.postDelayed({
+            if (missionInProgress && activeMissionGameType == MissionGameType.AIR_CLEAN) {
+                renderAirCleanRound()
+            }
+        }, 650L)
     }
 
     private fun missionButtonGrid(
@@ -1528,6 +1697,31 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         )
         return column
     }
+
+    private fun setMissionPrompt(
+        text: String,
+        colorHex: String,
+        textSizeSp: Float,
+        bold: Boolean,
+    ) {
+        tvMissionGamePrompt.text = text
+        tvMissionGamePrompt.setTextColor(colorHex.toColorInt())
+        tvMissionGamePrompt.textSize = textSizeSp
+        tvMissionGamePrompt.setTypeface(null, if (bold) Typeface.BOLD else Typeface.NORMAL)
+    }
+
+    private fun roundedDrawable(
+        colorHex: String,
+        cornerRadius: Int,
+        strokeColor: Int,
+        strokeWidth: Int,
+    ): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(colorHex.toColorInt())
+            setCornerRadius(cornerRadius.toFloat())
+            setStroke(strokeWidth, strokeColor)
+        }
 
     private fun ovalDrawable(colorHex: String): GradientDrawable =
         GradientDrawable().apply {

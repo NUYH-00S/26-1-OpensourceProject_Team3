@@ -5,7 +5,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F6F4EA"
+    android:background="#F5F8F7"
     tools:context=".MainActivity">
 
     <ScrollView
@@ -18,7 +18,10 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:paddingStart="20dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="24dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -30,19 +33,24 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:includeFontPadding="false"
                     android:text="Walking Ritual"
-                    android:textColor="#005088"
+                    android:textColor="#12343B"
                     android:textSize="28sp"
                     android:textStyle="bold" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnLogin"
-                    android:layout_width="88dp"
+                    android:layout_width="112dp"
                     android:layout_height="44dp"
                     android:backgroundTint="#FFFFFF"
                     android:text="로그인"
-                    android:textColor="#005088"
-                    android:textSize="13sp" />
+                    android:textAllCaps="false"
+                    android:textColor="#0B5D73"
+                    android:textSize="13sp"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#D7E6E4"
+                    app:strokeWidth="1dp" />
             </LinearLayout>
 
             <LinearLayout
@@ -51,116 +59,182 @@
                 android:layout_weight="1"
                 android:gravity="center_vertical"
                 android:orientation="vertical"
-                android:paddingBottom="96dp">
+                android:paddingBottom="56dp">
 
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                app:cardBackgroundColor="#005088"
-                app:cardCornerRadius="8dp"
-                app:cardElevation="3dp">
+                <androidx.cardview.widget.CardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:cardBackgroundColor="#FFFFFF"
+                    app:cardCornerRadius="8dp"
+                    app:cardElevation="2dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="18dp">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/tvWalkRecommendation"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:includeFontPadding="false"
+                                android:text="오늘의 날씨"
+                                android:textColor="#12343B"
+                                android:textSize="18sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvWeatherUpdateNote"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="5분마다 자동 업데이트"
+                                android:textColor="#6D7F82"
+                                android:textSize="11sp" />
+                        </LinearLayout>
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="14dp"
+                            android:background="#E7EFEE" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="16dp"
+                            android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="기온"
+                                    android:textColor="#6D7F82"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/tvWeatherTemperature"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="기온 : --℃"
+                                    android:textColor="#0B5D73"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="16dp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:text="CO2"
+                                    android:textColor="#6D7F82"
+                                    android:textSize="12sp" />
+
+                                <TextView
+                                    android:id="@+id/tvWeatherCo2"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="4dp"
+                                    android:text="CO2: --ppm"
+                                    android:textColor="#0B5D73"
+                                    android:textSize="22sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRefreshDashboard"
+                            android:layout_width="match_parent"
+                            android:layout_height="46dp"
+                            android:layout_marginTop="18dp"
+                            android:backgroundTint="#EAF7F4"
+                            android:text="새로고침"
+                            android:textAllCaps="false"
+                            android:textColor="#0B5D73"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            app:cornerRadius="8dp"
+                            app:strokeColor="#CDE8E2"
+                            app:strokeWidth="1dp" />
+                    </LinearLayout>
+                </androidx.cardview.widget.CardView>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRequestRoute"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="16dp"
+                    android:backgroundTint="#0B5D73"
+                    android:text="경로 안내 시작"
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal">
 
-                    <TextView
-                        android:id="@+id/tvWalkRecommendation"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="오늘의 날씨"
-                        android:textColor="#F6F4EA"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRanking"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_marginEnd="5dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#FFFFFF"
+                        android:text="랭킹"
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#D7E6E4"
+                        app:strokeWidth="1dp" />
 
-                    <TextView
-                        android:id="@+id/tvWeatherTemperature"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="기온 : --℃"
-                        android:textColor="#F6F4EA"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvWeatherCo2"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="CO2: --ppm"
-                        android:textColor="#F6F4EA"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvWeatherUpdateNote"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:text="5분마다 자동 업데이트"
-                        android:textColor="#CDEFE7"
-                        android:textSize="12sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnReward"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="5dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="#FFFFFF"
+                        android:text="보상"
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#D7E6E4"
+                        app:strokeWidth="1dp" />
                 </LinearLayout>
-            </androidx.cardview.widget.CardView>
 
-            <Button
-                android:id="@+id/btnRefreshDashboard"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="10dp"
-                android:backgroundTint="#11CAA0"
-                android:text="새로고침"
-                android:textColor="#0E2E3A"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <Button
-                android:id="@+id/btnRequestRoute"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="18dp"
-                android:backgroundTint="#005088"
-                android:text="경로 안내 시작"
-                android:textColor="#F6F4EA"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btnRanking"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginEnd="5dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#FFFFFF"
-                    android:text="랭킹"
-                    android:textColor="#005088" />
-
-                <Button
-                    android:id="@+id/btnReward"
-                    android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="5dp"
-                    android:layout_weight="1"
-                    android:backgroundTint="#FFFFFF"
-                    android:text="보상"
-                    android:textColor="#005088" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/tvLocationStatus"
-                android:layout_width="1dp"
-                android:layout_height="1dp"
-                android:visibility="gone" />
+                <TextView
+                    android:id="@+id/tvLocationStatus"
+                    android:layout_width="1dp"
+                    android:layout_height="1dp"
+                    android:visibility="gone" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
@@ -169,7 +243,7 @@
         android:id="@+id/loginContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F6F4EA"
+        android:background="#F5F8F7"
         android:fillViewport="true"
         android:visibility="gone">
 
@@ -177,14 +251,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="20dp">
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="#005088"
+                app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="4dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -193,22 +267,26 @@
                     android:orientation="horizontal"
                     android:padding="12dp">
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnLoginBackHome"
                         android:layout_width="72dp"
                         android:layout_height="42dp"
-                        android:backgroundTint="#F6F4EA"
+                        android:backgroundTint="#EAF7F4"
                         android:text="홈"
-                        android:textColor="#005088" />
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#CDE8E2"
+                        app:strokeWidth="1dp" />
 
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
+                        android:layout_marginStart="14dp"
                         android:layout_weight="1"
                         android:text="로그인"
-                        android:textColor="#F6F4EA"
-                        android:textSize="18sp"
+                        android:textColor="#12343B"
+                        android:textSize="20sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -219,20 +297,20 @@
                 android:layout_marginTop="12dp"
                 app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="3dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="18dp">
+                    android:padding="20dp">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="계정 로그인"
-                        android:textColor="#005088"
-                        android:textSize="20sp"
+                        android:textColor="#12343B"
+                        android:textSize="22sp"
                         android:textStyle="bold" />
 
                     <EditText
@@ -240,11 +318,11 @@
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
                         android:layout_marginTop="16dp"
-                        android:backgroundTint="#005088"
+                        android:backgroundTint="#0B5D73"
                         android:hint="아이디"
                         android:inputType="text"
                         android:singleLine="true"
-                        android:textColor="#0E2E3A"
+                        android:textColor="#12343B"
                         android:textColorHint="#8A9AA7" />
 
                     <EditText
@@ -252,22 +330,24 @@
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
                         android:layout_marginTop="10dp"
-                        android:backgroundTint="#005088"
+                        android:backgroundTint="#0B5D73"
                         android:hint="비밀번호"
                         android:inputType="textPassword"
                         android:singleLine="true"
-                        android:textColor="#0E2E3A"
+                        android:textColor="#12343B"
                         android:textColorHint="#8A9AA7" />
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSubmitLogin"
                         android:layout_width="match_parent"
                         android:layout_height="52dp"
                         android:layout_marginTop="18dp"
-                        android:backgroundTint="#005088"
+                        android:backgroundTint="#0B5D73"
                         android:text="로그인"
-                        android:textColor="#F6F4EA"
-                        android:textStyle="bold" />
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>
@@ -277,7 +357,7 @@
         android:id="@+id/rankingContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F6F4EA"
+        android:background="#F5F8F7"
         android:fillViewport="true"
         android:visibility="gone">
 
@@ -285,14 +365,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="20dp">
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="#005088"
+                app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="4dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -301,22 +381,26 @@
                     android:orientation="horizontal"
                     android:padding="12dp">
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnRankingBackHome"
                         android:layout_width="72dp"
                         android:layout_height="42dp"
-                        android:backgroundTint="#F6F4EA"
+                        android:backgroundTint="#EAF7F4"
                         android:text="홈"
-                        android:textColor="#005088" />
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#CDE8E2"
+                        app:strokeWidth="1dp" />
 
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
+                        android:layout_marginStart="14dp"
                         android:layout_weight="1"
                         android:text="랭킹 보드"
-                        android:textColor="#F6F4EA"
-                        android:textSize="18sp"
+                        android:textColor="#12343B"
+                        android:textSize="20sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -327,20 +411,20 @@
                 android:layout_marginTop="12dp"
                 app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="3dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="18dp">
+                    android:padding="20dp">
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="오늘의 랭킹"
-                        android:textColor="#005088"
-                        android:textSize="20sp"
+                        android:textColor="#12343B"
+                        android:textSize="22sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -349,17 +433,17 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="내 랭킹 정보를 불러오는 중"
-                        android:textColor="#52616F"
+                        android:textColor="#6D7F82"
                         android:textSize="14sp" />
 
                     <TextView
                         android:id="@+id/tvRankingList"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:lineSpacingExtra="6dp"
+                        android:layout_marginTop="18dp"
+                        android:lineSpacingExtra="7dp"
                         android:text="랭킹 목록을 불러오는 중"
-                        android:textColor="#2E4D68"
+                        android:textColor="#244B5A"
                         android:textSize="15sp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -370,7 +454,7 @@
         android:id="@+id/rewardContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F6F4EA"
+        android:background="#F5F8F7"
         android:fillViewport="true"
         android:visibility="gone">
 
@@ -378,14 +462,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="18dp">
+            android:padding="20dp">
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardBackgroundColor="#005088"
+                app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="4dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -394,22 +478,26 @@
                     android:orientation="horizontal"
                     android:padding="12dp">
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnRewardBackHome"
                         android:layout_width="72dp"
                         android:layout_height="42dp"
-                        android:backgroundTint="#F6F4EA"
+                        android:backgroundTint="#EAF7F4"
                         android:text="홈"
-                        android:textColor="#005088" />
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#CDE8E2"
+                        app:strokeWidth="1dp" />
 
                     <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
+                        android:layout_marginStart="14dp"
                         android:layout_weight="1"
                         android:text="보상 교환"
-                        android:textColor="#F6F4EA"
-                        android:textSize="18sp"
+                        android:textColor="#12343B"
+                        android:textSize="20sp"
                         android:textStyle="bold" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
@@ -420,49 +508,58 @@
                 android:layout_marginTop="12dp"
                 app:cardBackgroundColor="#FFFFFF"
                 app:cardCornerRadius="8dp"
-                app:cardElevation="3dp">
+                app:cardElevation="2dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="18dp">
+                    android:padding="20dp">
 
                     <TextView
                         android:id="@+id/tvUserPoints"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="보유 포인트: 0 P"
-                        android:textColor="#005088"
-                        android:textSize="20sp"
+                        android:textColor="#12343B"
+                        android:textSize="22sp"
                         android:textStyle="bold" />
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnExchange100"
                         android:layout_width="match_parent"
-                        android:layout_height="52dp"
-                        android:layout_marginTop="16dp"
-                        android:backgroundTint="#005088"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="18dp"
+                        android:backgroundTint="#0B5D73"
                         android:text="10,000포인트 &gt; 100원"
-                        android:textColor="#F6F4EA" />
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnExchange1100"
                         android:layout_width="match_parent"
-                        android:layout_height="52dp"
+                        android:layout_height="54dp"
                         android:layout_marginTop="10dp"
-                        android:backgroundTint="#005088"
+                        android:backgroundTint="#0B5D73"
                         android:text="100,000포인트 &gt; 1,100원"
-                        android:textColor="#F6F4EA" />
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnExchange12000"
                         android:layout_width="match_parent"
-                        android:layout_height="52dp"
+                        android:layout_height="54dp"
                         android:layout_marginTop="10dp"
-                        android:backgroundTint="#005088"
+                        android:backgroundTint="#0B5D73"
                         android:text="1,000,000포인트 &gt; 12,000원"
-                        android:textColor="#F6F4EA" />
+                        android:textAllCaps="false"
+                        android:textColor="#FFFFFF"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>
@@ -472,7 +569,7 @@
         android:id="@+id/mapContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#F6F4EA"
+        android:background="#F5F8F7"
         android:visibility="gone">
 
         <androidx.cardview.widget.CardView
@@ -481,9 +578,9 @@
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="12dp"
             android:layout_marginTop="12dp"
-            app:cardBackgroundColor="#005088"
+            app:cardBackgroundColor="#FFFFFF"
             app:cardCornerRadius="8dp"
-            app:cardElevation="4dp"
+            app:cardElevation="3dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent">
@@ -500,13 +597,17 @@
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <Button
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnBackHome"
-                        android:layout_width="72dp"
-                        android:layout_height="42dp"
-                        android:backgroundTint="#F6F4EA"
+                        android:layout_width="70dp"
+                        android:layout_height="40dp"
+                        android:backgroundTint="#EAF7F4"
                         android:text="홈"
-                        android:textColor="#005088" />
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#CDE8E2"
+                        app:strokeWidth="1dp" />
 
                     <TextView
                         android:id="@+id/tvMapHeader"
@@ -514,29 +615,37 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
+                        android:includeFontPadding="false"
                         android:text="경로 안내 준비 중"
-                        android:textColor="#F6F4EA"
-                        android:textSize="15sp"
+                        android:textColor="#12343B"
+                        android:textSize="18sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/tvDestinationDistance"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="목적지까지 --m"
-                    android:textColor="#F6F4EA"
-                    android:textSize="13sp" />
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/tvNextTotemDistance"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="다음 토템까지 --m"
-                    android:textColor="#CDEFE7"
-                    android:textSize="13sp" />
+                    <TextView
+                        android:id="@+id/tvDestinationDistance"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="목적지까지 --m"
+                        android:textColor="#0B5D73"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvNextTotemDistance"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="다음 토템까지 --m"
+                        android:textColor="#6D7F82"
+                        android:textSize="14sp" />
+                </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -561,7 +670,7 @@
             android:visibility="gone"
             app:cardBackgroundColor="#FFFFFF"
             app:cardCornerRadius="8dp"
-            app:cardElevation="4dp"
+            app:cardElevation="3dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/recommendationCard">
@@ -577,52 +686,64 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="추천 경로 3개 중 선택"
-                    android:textColor="#005088"
-                    android:textSize="14sp"
+                    android:textColor="#12343B"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRouteOption1"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
-                    android:layout_marginTop="8dp"
-                    android:backgroundTint="#005088"
+                    android:layout_marginTop="10dp"
+                    android:backgroundTint="#0B5D73"
                     android:text="1번 경로"
-                    android:textColor="#F6F4EA"
-                    android:textSize="13sp" />
+                    android:textAllCaps="false"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    app:cornerRadius="8dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRouteOption2"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:layout_marginTop="6dp"
-                    android:backgroundTint="#EDF7F5"
+                    android:backgroundTint="#EAF7F4"
                     android:text="2번 경로"
-                    android:textColor="#005088"
-                    android:textSize="13sp" />
+                    android:textAllCaps="false"
+                    android:textColor="#0B5D73"
+                    android:textSize="13sp"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#CDE8E2"
+                    app:strokeWidth="1dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnRouteOption3"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:layout_marginTop="6dp"
-                    android:backgroundTint="#EDF7F5"
+                    android:backgroundTint="#EAF7F4"
                     android:text="3번 경로"
-                    android:textColor="#005088"
-                    android:textSize="13sp" />
+                    android:textAllCaps="false"
+                    android:textColor="#0B5D73"
+                    android:textSize="13sp"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#CDE8E2"
+                    app:strokeWidth="1dp" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnStartRouteGuidance"
                     android:layout_width="match_parent"
                     android:layout_height="46dp"
                     android:layout_marginTop="10dp"
-                    android:backgroundTint="#11CAA0"
+                    android:backgroundTint="#17C6A3"
                     android:enabled="false"
                     android:text="안내 시작"
-                    android:textColor="#0E2E3A"
+                    android:textAllCaps="false"
+                    android:textColor="#12343B"
                     android:textSize="14sp"
                     android:textStyle="bold"
-                    android:visibility="gone" />
+                    android:visibility="gone"
+                    app:cornerRadius="8dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
@@ -630,7 +751,7 @@
             android:id="@+id/blurOverlay"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:background="#B3F6F4EA"
+            android:background="#B3F5F8F7"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
@@ -655,7 +776,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="14dp">
+                android:padding="16dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -669,8 +790,8 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="토템 미션"
-                        android:textColor="#005088"
-                        android:textSize="16sp"
+                        android:textColor="#12343B"
+                        android:textSize="19sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -678,8 +799,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="60초"
-                        android:textColor="#0E2E3A"
-                        android:textSize="14sp"
+                        android:textColor="#0B5D73"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
@@ -687,10 +808,10 @@
                     android:id="@+id/tvMissionGameScore"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
+                    android:layout_marginTop="5dp"
                     android:text="점수 0"
-                    android:textColor="#2E4D68"
-                    android:textSize="13sp" />
+                    android:textColor="#244B5A"
+                    android:textSize="15sp" />
 
                 <TextView
                     android:id="@+id/tvMissionGamePrompt"
@@ -698,15 +819,16 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="미션 준비 중"
-                    android:textColor="#52616F"
-                    android:textSize="13sp" />
+                    android:textColor="#12343B"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
 
                 <FrameLayout
                     android:id="@+id/missionGameBoard"
                     android:layout_width="match_parent"
-                    android:layout_height="220dp"
+                    android:layout_height="280dp"
                     android:layout_marginTop="10dp"
-                    android:background="#EDF7F5" />
+                    android:background="#EAF7F4" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
     </androidx.constraintlayout.widget.ConstraintLayout>
