@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 from statistics import mean
+from time import monotonic
 from typing import Any
 
 from flask import Flask, Response, request
 
-from firebase_store import Database, sensor_id_from_name
+from firebase_store import (
+    Database,
+    NON_MOBILE_SENSOR_IDS,
+    is_unused_official_sensor_name,
+    sensor_id_from_name,
+)
 from official_sensor_client import fetch_official_sensors
 from route_engine import recommend_routes
 
@@ -16,11 +23,90 @@ app = Flask(__name__)
 app.json.sort_keys = False
 db = Database()
 db.initialize()
+READ_CACHE_TTL_SECONDS = int(os.environ.get("FIREBASE_READ_CACHE_TTL_SECONDS", "300"))
+read_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+route_cache: dict[tuple[float, float, int, int], tuple[float, list[dict[str, Any]]]] = {}
+
+
+def official_sync_enabled() -> bool:
+    return os.environ.get("OFFICIAL_SYNC_ENABLED", "true").lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def clear_read_cache() -> None:
+    read_cache.clear()
+    route_cache.clear()
+
+
+def cached_sensors(*, collectible: bool = False) -> list[dict[str, Any]]:
+    key = "collectible_sensors" if collectible else "all_sensors"
+    now = monotonic()
+    cached = read_cache.get(key)
+    if cached and cached[0] > now:
+        return [dict(sensor) for sensor in cached[1]]
+
+    all_cached = read_cache.get("all_sensors")
+    if collectible and all_cached and all_cached[0] > now:
+        sensors = [
+            sensor
+            for sensor in all_cached[1]
+            if sensor["sensor_id"] not in NON_MOBILE_SENSOR_IDS
+            and not is_unused_official_sensor_name(sensor["sensor_name"])
+        ]
+        read_cache[key] = (all_cached[0], [dict(sensor) for sensor in sensors])
+        return [dict(sensor) for sensor in sensors]
+
+    sensors = (
+        db.list_collectible_sensors_with_counts()
+        if collectible
+        else db.list_sensors_with_counts()
+    )
+    read_cache[key] = (now + READ_CACHE_TTL_SECONDS, [dict(sensor) for sensor in sensors])
+    return [dict(sensor) for sensor in sensors]
+
+
+def cached_routes(
+    *,
+    sensors: list[dict[str, Any]],
+    current_latitude: float,
+    current_longitude: float,
+    max_distance_meter: int,
+    route_option_count: int,
+) -> list[dict[str, Any]]:
+    now = monotonic()
+    key = (
+        round(current_latitude, 4),
+        round(current_longitude, 4),
+        max_distance_meter,
+        route_option_count,
+    )
+    cached = route_cache.get(key)
+    if cached and cached[0] > now:
+        return copy.deepcopy(cached[1])
+
+    routes = recommend_routes(
+        sensors=sensors,
+        current_latitude=current_latitude,
+        current_longitude=current_longitude,
+        max_distance_meter=max_distance_meter,
+        route_option_count=route_option_count,
+    )
+    route_cache[key] = (now + READ_CACHE_TTL_SECONDS, copy.deepcopy(routes))
+    return copy.deepcopy(routes)
 
 
 @app.get("/")
 def home():
-    return "Campus Collector Flask Server is running!"
+    return "Walking Ritual Flask Server is running!"
+
+
+@app.get("/healthz")
+def healthz():
+    return success({"status": "ok"}, "서버가 정상 동작 중입니다.")
 
 
 @app.post("/api/v1/sensors/sync")
@@ -39,7 +125,7 @@ def list_sensors():
     return success(
         {
             "sync": sync_result,
-            "sensors": [sensor_response(sensor) for sensor in db.list_sensors_with_counts()],
+            "sensors": [sensor_response(sensor) for sensor in cached_sensors()],
         },
         "센서 목록 조회에 성공했습니다.",
     )
@@ -55,9 +141,9 @@ def app_bootstrap():
     route_option_count = int(request.args.get("routeOptionCount", 2))
 
     sync_result = sync_from_ta_server() if sync else None
-    sensors = db.list_sensors_with_counts()
-    route_sensors = db.list_collectible_sensors_with_counts()
-    routes = recommend_routes(
+    sensors = cached_sensors()
+    route_sensors = cached_sensors(collectible=True)
+    routes = cached_routes(
         sensors=route_sensors,
         current_latitude=current_latitude,
         current_longitude=current_longitude,
@@ -93,13 +179,14 @@ def upload_sensor_reading():
         return failure(f"필수 요청 데이터가 누락되었습니다: {', '.join(missing)}", 400)
 
     data = db.insert_sensor_reading(payload)
+    clear_read_cache()
     return success(data, "센서 데이터가 저장되었습니다.")
 
 
 @app.get("/api/v1/weather/sensors")
 def weather_sensors():
     target = request.args.get("target", "ALL")
-    sensors = db.list_collectible_sensors_with_counts()
+    sensors = cached_sensors(collectible=True)
     if target != "ALL":
         sensors = [
             sensor
@@ -121,8 +208,8 @@ def route_recommendations():
     max_distance_meter = int(payload.get("maxDistanceMeter", 3500))
     route_option_count = int(payload.get("routeOptionCount", 2))
 
-    sensors = db.list_collectible_sensors_with_counts()
-    routes = recommend_routes(
+    sensors = cached_sensors(collectible=True)
+    routes = cached_routes(
         sensors=sensors,
         current_latitude=current_latitude,
         current_longitude=current_longitude,
@@ -279,13 +366,25 @@ def legacy_sensor_report():
 
 
 def sync_from_ta_server() -> dict[str, Any]:
+    if not official_sync_enabled():
+        local_sensors = cached_sensors()
+        return {
+            "syncedSensorCount": 0,
+            "storedReadingCount": 0,
+            "freshSensorCount": sum(1 for sensor in local_sensors if sensor["fresh"]),
+            "syncedAt": None,
+            "source": "firebase-cache",
+            "message": "Official sensor sync is disabled; using cached Firebase data.",
+        }
+
     try:
         sensors = fetch_official_sensors()
         result = db.sync_official_sensors(sensors)
+        clear_read_cache()
         result["source"] = "ta-server"
         return result
     except Exception as exc:
-        local_sensors = db.list_sensors_with_counts()
+        local_sensors = cached_sensors()
         return {
             "syncedSensorCount": 0,
             "storedReadingCount": 0,
@@ -385,4 +484,5 @@ def compact_sensor_for_app(sensor: dict[str, Any]) -> dict[str, Any]:
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    app.run(host="0.0.0.0", port=5000, debug=debug)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=debug)

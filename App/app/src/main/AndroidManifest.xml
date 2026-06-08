@@ -29,12 +29,12 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="${usesCleartextTraffic}">
 
         <!-- ★★★★★ Naver Maps Client ID ★★★★★ -->
         <meta-data
             android:name="com.naver.maps.map.NCP_KEY_ID"
-            android:value="912b6xe87j" />
+            android:value="${naverMapClientId}" />
 
         <activity
             android:name=".MainActivity"

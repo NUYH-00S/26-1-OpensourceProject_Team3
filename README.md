@@ -32,12 +32,22 @@ python app.py
 
 ## Android app
 
-The Android app calls the Flask server at `http://10.0.2.2:5000`, which is the Android emulator address for the host PC. If running on a real phone, change `serverUrl` in `App/app/src/main/java/com/example/myapplication/MainActivity.kt` to the PC LAN IP, such as `http://192.168.0.2:5000`.
+The Android app reads its backend URL from `BuildConfig.SERVER_URL`.
+The default debug URL is `http://10.0.2.2:5000`, which is the Android emulator address for the host PC.
+For a real phone or campus APK, build the app with a deployed `https://` server URL.
 
 ```bash
 cd App
 gradlew.bat :app:assembleDebug
+
+# Real phone / campus debug APK
+gradlew.bat :app:assembleDebug -PWALKING_RITUAL_DEBUG_SERVER_URL=https://YOUR_SERVER_URL
+
+# Release APK
+gradlew.bat :app:assembleRelease -PWALKING_RITUAL_SERVER_URL=https://YOUR_SERVER_URL
 ```
+
+See `DEPLOYMENT.md` for Firebase credentials, Docker server deployment, release signing, and real phone testing.
 
 The app now uses our backend APIs:
 

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.request
 from typing import Any
 
 
-OFFICIAL_SENSOR_API_URL = "http://203.255.81.72:10021/sensor/api/map"
+DEFAULT_OFFICIAL_SENSOR_API_URL = "http://203.255.81.72:10021/sensor/api/map"
+OFFICIAL_SENSOR_API_URL = os.environ.get(
+    "OFFICIAL_SENSOR_API_URL",
+    DEFAULT_OFFICIAL_SENSOR_API_URL,
+)
 UNUSED_SENSOR_NAMES = {"pws01", "vs01", "vs02"}
 
 

@@ -1,0 +1,10 @@
+__pycache__/
+.test_data/
+.deps/
+.python_deps/
+*.pyc
+*.log
+.env
+firebase-service-account*.json
+service-account*.json
+campus_walkways.overpass.json

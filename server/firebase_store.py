@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -156,16 +158,21 @@ class FirestoreDatabase:
             firebase_app = firebase_admin.get_app(app_name)
         except ValueError:
             service_account_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+            service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+            service_account_base64 = os.environ.get("FIREBASE_SERVICE_ACCOUNT_BASE64")
             options: dict[str, Any] = {}
             project_id = os.environ.get("FIREBASE_PROJECT_ID")
             if project_id:
                 options["projectId"] = project_id
 
-            credential = (
-                credentials.Certificate(service_account_path)
-                if service_account_path
-                else None
-            )
+            credential = None
+            if service_account_path:
+                credential = credentials.Certificate(service_account_path)
+            elif service_account_json:
+                credential = credentials.Certificate(json.loads(service_account_json))
+            elif service_account_base64:
+                decoded_json = base64.b64decode(service_account_base64).decode("utf-8")
+                credential = credentials.Certificate(json.loads(decoded_json))
             firebase_app = firebase_admin.initialize_app(
                 credential=credential,
                 options=options or None,

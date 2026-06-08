@@ -73,7 +73,7 @@ import kotlin.random.Random
 @Suppress("SetTextI18n")
 class MainActivity : AppCompatActivity(), SensorEventListener {
 
-    private val serverUrl = "http://10.0.2.2:5000"
+    private val serverUrl = BuildConfig.SERVER_URL.trimEnd('/')
     private val logTag = "CampusCollector"
     private val defaultUserId = "USER_001"
     private val authPrefsName = "walking_ritual_auth"
