@@ -21,6 +21,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -103,6 +104,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var btnBackHome: Button
     private lateinit var btnLoginBackHome: Button
     private lateinit var btnSubmitLogin: Button
+    private lateinit var btnSubmitSignup: Button
     private lateinit var btnRankingBackHome: Button
     private lateinit var btnRewardBackHome: Button
     private lateinit var routeOptionCard: CardView
@@ -250,6 +252,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnBackHome = findViewById(R.id.btnBackHome)
         btnLoginBackHome = findViewById(R.id.btnLoginBackHome)
         btnSubmitLogin = findViewById(R.id.btnSubmitLogin)
+        btnSubmitSignup = findViewById(R.id.btnSubmitSignup)
         btnRankingBackHome = findViewById(R.id.btnRankingBackHome)
         btnRewardBackHome = findViewById(R.id.btnRewardBackHome)
         routeOptionCard = findViewById(R.id.routeOptionCard)
@@ -355,6 +358,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         btnSubmitLogin.setOnClickListener {
             submitLogin()
         }
+        btnSubmitSignup.setOnClickListener {
+            showSignupDialog()
+        }
         btnRankingBackHome.setOnClickListener {
             showHomeScreen()
         }
@@ -433,6 +439,82 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    private fun showSignupDialog() {
+        hideKeyboard()
+
+        val signupId = signupEditText("아이디", InputType.TYPE_CLASS_TEXT).apply {
+            setText(etLoginId.text.toString().trim())
+        }
+        val signupPassword = signupEditText(
+            "비밀번호",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+        )
+        val signupNickname = signupEditText("닉네임", InputType.TYPE_CLASS_TEXT)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(signupId)
+            addView(signupPassword)
+            addView(signupNickname)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("회원가입")
+            .setView(container)
+            .setNegativeButton("취소", null)
+            .setPositiveButton("가입", null)
+            .create()
+
+        dialog.setOnShowListener {
+            val submitButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            submitButton.setOnClickListener {
+                val loginId = signupId.text.toString().trim()
+                val password = signupPassword.text.toString()
+                val nickname = signupNickname.text.toString().trim().ifBlank { loginId }
+                if (loginId.isBlank() || password.isBlank()) {
+                    Toast.makeText(this, "아이디와 비밀번호를 입력해주세요.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                if (password.length < 4) {
+                    Toast.makeText(this, "비밀번호는 4자 이상이어야 합니다.", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                submitButton.isEnabled = false
+                submitButton.text = "가입 중"
+                requestSignup(loginId, password, nickname) { success ->
+                    submitButton.isEnabled = true
+                    submitButton.text = "가입"
+                    if (success) {
+                        dialog.dismiss()
+                        etLoginId.setText(loginId)
+                        etLoginPassword.text.clear()
+                        handlePostLoginNavigation()
+                    }
+                }
+            }
+        }
+        dialog.setOnDismissListener { hideKeyboard() }
+        dialog.show()
+        signupId.requestFocus()
+    }
+
+    private fun signupEditText(hintText: String, inputTypeValue: Int): EditText {
+        return EditText(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(52),
+            ).apply {
+                topMargin = dp(8)
+            }
+            hint = hintText
+            inputType = inputTypeValue
+            isSingleLine = true
+            setTextColor("#12343B".toColorInt())
+            setHintTextColor("#8A9AA7".toColorInt())
+        }
+    }
+
     private fun requestLogin(
         loginId: String,
         password: String,
@@ -470,6 +552,51 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             } catch (e: Exception) {
                 runOnUiThread {
                     Toast.makeText(this, "로그인 서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
+                    onFinished(false)
+                }
+            }
+        }
+    }
+
+    private fun requestSignup(
+        loginId: String,
+        password: String,
+        nickname: String,
+        onFinished: (Boolean) -> Unit,
+    ) {
+        val body = JSONObject().apply {
+            put("loginId", loginId)
+            put("password", password)
+            put("nickname", nickname)
+        }
+
+        thread {
+            try {
+                val conn = openPost(URL("$serverUrl/api/v1/auth/register"), body)
+                val responseBody = readResponseBody(conn)
+                val responseJson = JSONObject(responseBody)
+                if (conn.responseCode != 200) {
+                    val message = responseJson.optString("message", "회원가입에 실패했습니다.")
+                    runOnUiThread {
+                        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+                        onFinished(false)
+                    }
+                    return@thread
+                }
+
+                val data = responseJson.getJSONObject("data")
+                runOnUiThread {
+                    applyLoggedInUser(
+                        newUserId = data.getString("userId"),
+                        newNickname = data.optString("nickname", nickname),
+                        newAccessToken = data.optString("accessToken", ""),
+                    )
+                    Toast.makeText(this, "${userNickname.ifBlank { nickname }}님, 가입이 완료되었습니다.", Toast.LENGTH_SHORT).show()
+                    onFinished(true)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(this, "회원가입 서버 연결에 실패했습니다.", Toast.LENGTH_SHORT).show()
                     onFinished(false)
                 }
             }
@@ -694,7 +821,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         return URLEncoder.encode(userId, "UTF-8")
     }
 
+    private fun hideKeyboard() {
+        val inputMethodManager = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
+        val token = currentFocus?.windowToken ?: window.decorView.windowToken
+        inputMethodManager.hideSoftInputFromWindow(token, 0)
+        currentFocus?.clearFocus()
+    }
+
     private fun showHomeScreen() {
+        hideKeyboard()
         if (::sensorManager.isInitialized) {
             resetMissionState(clearTarget = true)
         }

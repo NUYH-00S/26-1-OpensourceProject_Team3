@@ -287,6 +287,27 @@ def login():
     )
 
 
+@app.post("/api/v1/auth/register")
+def register():
+    payload = request.get_json(force=True)
+    try:
+        user = db.create_user(
+            login_id=payload.get("loginId", ""),
+            raw_password=payload.get("password", ""),
+            nickname=payload.get("nickname"),
+        )
+    except ValueError as exc:
+        return failure(str(exc), 400)
+    return success(
+        {
+            "userId": user["user_id"],
+            "nickname": user["nickname"],
+            "accessToken": f"sample-token-{user['user_id']}",
+        },
+        "회원가입이 완료되었습니다.",
+    )
+
+
 @app.get("/api/walk/recommendation")
 def legacy_walk_recommendation():
     sync_from_ta_server()

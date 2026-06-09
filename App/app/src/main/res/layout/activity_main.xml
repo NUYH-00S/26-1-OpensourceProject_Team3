@@ -120,17 +120,9 @@
                                 android:orientation="vertical">
 
                                 <TextView
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:text="기온"
-                                    android:textColor="#6D7F82"
-                                    android:textSize="12sp" />
-
-                                <TextView
                                     android:id="@+id/tvWeatherTemperature"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
                                     android:text="기온 : --℃"
                                     android:textColor="#0B5D73"
                                     android:textSize="22sp"
@@ -145,17 +137,9 @@
                                 android:orientation="vertical">
 
                                 <TextView
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:text="CO2"
-                                    android:textColor="#6D7F82"
-                                    android:textSize="12sp" />
-
-                                <TextView
                                     android:id="@+id/tvWeatherCo2"
                                     android:layout_width="match_parent"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="4dp"
                                     android:text="CO2: --ppm"
                                     android:textColor="#0B5D73"
                                     android:textSize="22sp"
@@ -272,7 +256,7 @@
                         android:layout_width="72dp"
                         android:layout_height="42dp"
                         android:backgroundTint="#EAF7F4"
-                        android:text="홈"
+                        android:text="←"
                         android:textAllCaps="false"
                         android:textColor="#0B5D73"
                         app:cornerRadius="8dp"
@@ -348,6 +332,20 @@
                         android:textColor="#FFFFFF"
                         android:textStyle="bold"
                         app:cornerRadius="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSubmitSignup"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:layout_marginTop="10dp"
+                        android:backgroundTint="#FFFFFF"
+                        android:text="회원가입"
+                        android:textAllCaps="false"
+                        android:textColor="#0B5D73"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#CDE8E2"
+                        app:strokeWidth="1dp" />
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
         </LinearLayout>
@@ -386,7 +384,7 @@
                         android:layout_width="72dp"
                         android:layout_height="42dp"
                         android:backgroundTint="#EAF7F4"
-                        android:text="홈"
+                        android:text="←"
                         android:textAllCaps="false"
                         android:textColor="#0B5D73"
                         app:cornerRadius="8dp"
@@ -483,7 +481,7 @@
                         android:layout_width="72dp"
                         android:layout_height="42dp"
                         android:backgroundTint="#EAF7F4"
-                        android:text="홈"
+                        android:text="←"
                         android:textAllCaps="false"
                         android:textColor="#0B5D73"
                         app:cornerRadius="8dp"
@@ -602,7 +600,7 @@
                         android:layout_width="70dp"
                         android:layout_height="40dp"
                         android:backgroundTint="#EAF7F4"
-                        android:text="홈"
+                        android:text="←"
                         android:textAllCaps="false"
                         android:textColor="#0B5D73"
                         app:cornerRadius="8dp"

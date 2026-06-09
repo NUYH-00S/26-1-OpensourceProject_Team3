@@ -492,11 +492,46 @@ class FirestoreDatabase:
         )
         return route_id
 
+    def create_user(self, login_id: str, raw_password: str, nickname: str | None = None) -> dict[str, Any]:
+        normalized_login_id = login_id.strip().lower()
+        if not normalized_login_id:
+            raise ValueError("아이디를 입력해주세요.")
+        if len(raw_password) < 4:
+            raise ValueError("비밀번호는 4자 이상이어야 합니다.")
+
+        existing_users = (
+            self.collection("users")
+            .where("login_id", "==", normalized_login_id)
+            .limit(1)
+            .stream()
+        )
+        if any(True for _ in existing_users):
+            raise ValueError("이미 사용 중인 아이디입니다.")
+
+        now = utc_now_iso()
+        user_id = next_id("USER")
+        display_name = (nickname or login_id).strip() or normalized_login_id
+        user_payload = {
+            "user_id": user_id,
+            "login_id": normalized_login_id,
+            "password_hash": hash_password(raw_password),
+            "nickname": display_name,
+            "total_point": 0,
+            "created_at": now,
+        }
+        self.collection("users").document(user_id).set(user_payload)
+        return {
+            "user_id": user_id,
+            "nickname": display_name,
+            "total_point": 0,
+        }
+
     def get_user_by_login(self, login_id: str, raw_password: str) -> dict[str, Any] | None:
+        normalized_login_id = login_id.strip().lower()
         password_hash = hash_password(raw_password)
         users = (
             self.collection("users")
-            .where("login_id", "==", login_id)
+            .where("login_id", "==", normalized_login_id)
             .limit(1)
             .stream()
         )
